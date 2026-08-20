@@ -474,7 +474,9 @@
           activeKeys[note] = false;
           if (el) el.classList.remove('active');
           const voice = engine.getVoice(activeVoiceType);
-          if (voice) voice.triggerRelease();
+          if (voice && typeof voice.triggerRelease === 'function') {
+            voice.triggerRelease(note);
+          }
           logMidi(`Note Off: ${note}`);
         }
       }

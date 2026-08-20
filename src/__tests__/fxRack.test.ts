@@ -5,8 +5,9 @@ vi.mock("tone", () => {
   class MockNode {
     connect() { return this; }
     toDestination() { return this; }
-    dispose() {}
+    dispose = vi.fn();
     start() { return this; }
+    stop = vi.fn().mockReturnValue(this);
   }
 
   class MockGain extends MockNode {

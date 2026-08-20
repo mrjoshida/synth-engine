@@ -7,6 +7,7 @@ vi.mock("tone", () => {
     toDestination() { return this; }
     dispose() {}
     start() { return this; }
+    stop() { return this; }
     chain() { return this; }
     set = vi.fn();
   }
@@ -147,24 +148,42 @@ describe("Patch Loading & State Isolation Unit Tests", () => {
     engine.dispose();
   });
 
-  it("should reset baseline FX sends and NOT leak delay between patches", () => {
-    // 1. Find a preset with heavy delay (e.g. moog-starlight-lead)
-    const starlightLead = BUILTIN_SYNTH_PRESETS.find(p => p.id === "moog-starlight-lead");
-    expect(starlightLead).toBeDefined();
-    expect(starlightLead?.fxSends?.delayWet).toBe(0.35);
+  it("should reset baseline FX sends and NOT leak delay or chorus parameters between patches", () => {
+    // 1. Manually configure custom FX parameters or load a custom patch
+    engine.fxRack.setConfig({
+      delayWet: 0.5,
+      delayTime: "4n",
+      delayFeedback: 0.8,
+      chorusWet: 0.6,
+      chorusFrequency: 4.0,
+      chorusDepth: 0.9,
+      reverbWet: 0.8,
+      masterVolume: 0.5
+    });
 
-    // 2. Load the lead patch and verify delay turns on
-    engine.loadPatch(starlightLead!);
-    expect(engine.fxRack.getConfig().delayWet).toBe(0.35);
+    const beforePatch = engine.fxRack.getConfig();
+    expect(beforePatch.delayTime).toBe("4n");
+    expect(beforePatch.delayFeedback).toBe(0.8);
+    expect(beforePatch.chorusFrequency).toBe(4.0);
 
-    // 3. Find a patch with NO delay (e.g. moog-model-24)
-    const subPatch = BUILTIN_SYNTH_PRESETS.find(p => p.id === "moog-model-24");
-    expect(subPatch).toBeDefined();
-    expect(subPatch?.fxSends?.delayWet).toBeUndefined();
+    // 2. Load a patch with no FX sends specified
+    const dryPatch = {
+      id: "test-dry-patch",
+      name: "Test Dry Patch",
+      engineType: "poly" as const
+    };
 
-    // 4. Load the dry sub patch and verify delay resets back to 0.0 without state leakage
-    engine.loadPatch(subPatch!);
-    expect(engine.fxRack.getConfig().delayWet).toBe(0.0);
+    // 3. Verify all FX parameters are cleanly reset back to baseline defaults
+    engine.loadPatch(dryPatch);
+    const afterPatch = engine.fxRack.getConfig();
+    expect(afterPatch.delayWet).toBe(0.0);
+    expect(afterPatch.delayTime).toBe("8n.");
+    expect(afterPatch.delayFeedback).toBe(0.3);
+    expect(afterPatch.chorusWet).toBe(0.0);
+    expect(afterPatch.chorusFrequency).toBe(1.5);
+    expect(afterPatch.chorusDepth).toBe(0.6);
+    expect(afterPatch.reverbWet).toBe(0.15);
+    expect(afterPatch.masterVolume).toBe(0.85);
   });
 
   it("should load all 22 built-in presets sequentially without error", () => {
@@ -182,5 +201,25 @@ describe("Patch Loading & State Isolation Unit Tests", () => {
       expect(() => engine.playNote("C4", "8n", 0.8, vType)).not.toThrow();
       expect(() => engine.playChord(["C4", "E4", "G4"], "4n", 0.8, vType)).not.toThrow();
     });
+  });
+
+  it("should release specific notes on polyphonic voices when note is passed, and releaseAll when omitted", () => {
+    const polyVoice = engine.polyVoice;
+    const polySynth = (polyVoice as any).polySynth;
+    
+    polyVoice.triggerRelease("E4");
+    expect(polySynth.triggerRelease).toHaveBeenCalledWith("E4", undefined);
+
+    polyVoice.triggerRelease();
+    expect(polySynth.releaseAll).toHaveBeenCalled();
+
+    const fmVoice = engine.fmVoice;
+    const fmPoly = (fmVoice as any).fmPoly;
+
+    fmVoice.triggerRelease("G4");
+    expect(fmPoly.triggerRelease).toHaveBeenCalledWith("G4", undefined);
+
+    fmVoice.triggerRelease();
+    expect(fmPoly.releaseAll).toHaveBeenCalled();
   });
 });

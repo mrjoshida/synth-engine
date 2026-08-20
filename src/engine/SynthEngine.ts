@@ -188,9 +188,14 @@ export class SynthEngine {
     
     // Always reset baseline FX sends first, then apply patch-specific sends
     const baselineSends: Partial<FxConfig> = {
-      reverbWet: 0.1,
+      reverbWet: 0.15,
       chorusWet: 0.0,
+      chorusFrequency: 1.5,
+      chorusDepth: 0.6,
       delayWet: 0.0,
+      delayTime: "8n.",
+      delayFeedback: 0.3,
+      masterVolume: 0.85
     };
     this.fxRack.setConfig({ ...baselineSends, ...(patch.fxSends || {}) });
   }

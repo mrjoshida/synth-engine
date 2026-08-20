@@ -91,6 +91,13 @@ export class FxRack {
   }
 
   public dispose(): void {
+    if (this.chorus && typeof (this.chorus as any).stop === "function") {
+      try {
+        (this.chorus as any).stop();
+      } catch (e) {
+        console.warn("FxRack chorus stop error:", e);
+      }
+    }
     this.chorus?.dispose();
     this.delay?.dispose();
     this.reverb?.dispose();

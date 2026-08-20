@@ -47,7 +47,7 @@ export class DroneVoice extends BaseVoice {
     this.isActive = true;
   }
 
-  public triggerRelease(time?: number): void {
+  public triggerRelease(_note?: string | string[], time?: number): void {
     if (!this.droneSynth || !this.isActive) return;
     this.droneSynth.triggerRelease(time);
     this.isActive = false;

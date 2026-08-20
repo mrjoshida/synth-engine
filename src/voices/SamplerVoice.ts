@@ -22,23 +22,28 @@ export class SamplerVoice extends BaseVoice {
 
     this.isLoading = true;
     this.currentInstrumentId = config.id;
+    const activeLoadId = config.id;
     
     return new Promise((resolve) => {
       let settled = false;
       const onDone = () => {
         if (settled) return;
         settled = true;
-        this.isLoading = false;
-        this.onLoadCallbacks.forEach(cb => {
-          try { cb(); } catch (e) { console.error(e); }
-        });
+        if (this.currentInstrumentId === activeLoadId) {
+          this.isLoading = false;
+          this.onLoadCallbacks.forEach(cb => {
+            try { cb(); } catch (e) { console.error(e); }
+          });
+        }
         resolve();
       };
 
       // Safety timeout: Never hang the caller if any network request is delayed
       const timeoutId = setTimeout(() => {
         if (!settled) {
-          console.warn(`SamplerVoice: instrument "${config.id}" load timed out, readying available samples.`);
+          if (this.currentInstrumentId === activeLoadId) {
+            console.warn(`SamplerVoice: instrument "${config.id}" load timed out, readying available samples.`);
+          }
           onDone();
         }
       }, 5000);
@@ -98,9 +103,13 @@ export class SamplerVoice extends BaseVoice {
     }
   }
 
-  public triggerRelease(time?: number): void {
+  public triggerRelease(note?: string | string[], time?: number): void {
     try {
-      this.sampler?.releaseAll(time);
+      if (note && this.sampler) {
+        this.sampler.triggerRelease(note, time);
+      } else {
+        this.sampler?.releaseAll(time);
+      }
     } catch (e) {
       console.warn("SamplerVoice failed to triggerRelease:", e);
     }
