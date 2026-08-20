@@ -459,14 +459,14 @@
 
       const activeKeys = {};
       async function playNote(note, el) {
+        if (activeKeys[note]) return;
+        activeKeys[note] = true;
+        if (el) el.classList.add('active');
         const eng = await ensureAudio();
-        if (!activeKeys[note]) {
-          activeKeys[note] = true;
-          if (el) el.classList.add('active');
-          const voice = eng.getVoice(activeVoiceType);
-          if (voice) voice.triggerAttack(note);
-          logMidi(`Note On: ${note} (${activeVoiceType})`);
-        }
+        if (!activeKeys[note]) return; // Released while audio context was initializing
+        const voice = eng.getVoice(activeVoiceType);
+        if (voice) voice.triggerAttack(note);
+        logMidi(`Note On: ${note} (${activeVoiceType})`);
       }
       function stopNote(note, el) {
         if (!engine) return;

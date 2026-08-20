@@ -158,6 +158,20 @@ describe("FxRack Unit Tests", () => {
     expect(config.reverbDecay).toBeCloseTo(2.0);
   });
 
+  it("should support Tone.Reverb decay property when using Reverb instance", () => {
+    const mockReverbInstance = {
+      decay: 2.5,
+      wet: { value: 0.2 },
+      dispose: vi.fn(),
+      connect: vi.fn().mockReturnThis()
+    };
+    (fxRack as any).reverb = mockReverbInstance;
+
+    fxRack.setConfig({ reverbDecay: 4.2 });
+    expect(mockReverbInstance.decay).toBe(4.2);
+    expect(fxRack.getConfig().reverbDecay).toBe(4.2);
+  });
+
   it("should dispose properly and clear nodes", () => {
     fxRack.dispose();
     const config = fxRack.getConfig();

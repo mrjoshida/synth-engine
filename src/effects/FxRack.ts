@@ -55,8 +55,12 @@ export class FxRack {
     if (cfg.reverbWet !== undefined && this.reverb) {
       this.reverb.wet.value = Math.max(0, Math.min(1.0, cfg.reverbWet));
     }
-    if (cfg.reverbDecay !== undefined && this.reverb && "roomSize" in this.reverb) {
-      (this.reverb as any).roomSize.value = Math.max(0.01, Math.min(1.0, cfg.reverbDecay / 5));
+    if (cfg.reverbDecay !== undefined && this.reverb) {
+      if ("roomSize" in this.reverb) {
+        (this.reverb as any).roomSize.value = Math.max(0.01, Math.min(1.0, cfg.reverbDecay / 5));
+      } else if ("decay" in this.reverb) {
+        (this.reverb as any).decay = Math.max(0.1, cfg.reverbDecay);
+      }
     }
     if (cfg.chorusWet !== undefined && this.chorus) {
       this.chorus.wet.value = Math.max(0, Math.min(1.0, cfg.chorusWet));
@@ -81,7 +85,13 @@ export class FxRack {
   public getConfig(): FxConfig {
     return {
       reverbWet: this.reverb ? Number(this.reverb.wet.value) : 0,
-      reverbDecay: this.reverb && "roomSize" in this.reverb ? Number((this.reverb as any).roomSize.value) * 5 : 2.5,
+      reverbDecay: this.reverb
+        ? "roomSize" in this.reverb
+          ? Number((this.reverb as any).roomSize.value) * 5
+          : "decay" in this.reverb
+          ? Number((this.reverb as any).decay)
+          : 2.5
+        : 2.5,
       chorusWet: this.chorus ? Number(this.chorus.wet.value) : 0,
       chorusFrequency: this.chorus ? Number(this.chorus.frequency.value) : 1.5,
       chorusDepth: this.chorus ? Number(this.chorus.depth) : 0.6,
