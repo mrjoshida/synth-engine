@@ -21,26 +21,49 @@ export class SamplerVoice extends BaseVoice {
     }
 
     this.isLoading = true;
+    this.currentInstrumentId = config.id;
     
     return new Promise((resolve) => {
+      let settled = false;
+      const onDone = () => {
+        if (settled) return;
+        settled = true;
+        this.isLoading = false;
+        this.onLoadCallbacks.forEach(cb => {
+          try { cb(); } catch (e) { console.error(e); }
+        });
+        resolve();
+      };
+
+      // Safety timeout: Never hang the caller if any network request is delayed
+      const timeoutId = setTimeout(() => {
+        if (!settled) {
+          console.warn(`SamplerVoice: instrument "${config.id}" load timed out, readying available samples.`);
+          onDone();
+        }
+      }, 5000);
+
       this.sampler = new Tone.Sampler({
         urls: config.sampleMap,
         baseUrl: config.baseUrl,
         onload: () => {
-          this.isLoading = false;
-          if (this.sampler && this.outputNode) {
-            this.sampler.connect(this.outputNode);
-            if (config.volume !== undefined) {
-              this.sampler.volume.value = config.volume;
-            }
-          }
-          this.currentInstrumentId = config.id;
-          
-          this.onLoadCallbacks.forEach(cb => cb());
-          
-          resolve();
+          clearTimeout(timeoutId);
+          onDone();
+        },
+        onerror: (err) => {
+          clearTimeout(timeoutId);
+          console.warn(`SamplerVoice warning: failed to fetch some sample files for ${config.id}:`, err);
+          onDone();
         }
       });
+
+      // Connect immediately to output node so triggers immediately produce audio
+      if (this.outputNode) {
+        this.sampler.connect(this.outputNode);
+      }
+      if (config.volume !== undefined) {
+        this.sampler.volume.value = config.volume;
+      }
     });
   }
 

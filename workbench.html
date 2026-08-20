@@ -237,34 +237,47 @@
 
       const { SynthEngine, PresetManager, BUILTIN_INSTRUMENTS } = window.SynthEngineModule;
       let engine = null;
-      let presetManager = null;
+      let presetManager = new PresetManager();
       let analyzer = null;
+      let activeVoiceType = 'poly';
 
-      // Init
-      document.getElementById('btn-start-audio').addEventListener('click', async () => {
-        await Tone.start();
-        document.getElementById('audio-state-badge').className = 'badge on';
-        document.getElementById('audio-state-badge').innerText = 'Audio: Running';
-        
+      // Auto-populate UI immediately
+      populatePresets();
+      populateInstruments();
+      setupKeyboard();
+      setupFX();
+      setupWebMidi();
+
+      async function ensureAudio() {
         if (!engine) {
+          await Tone.start();
           engine = new SynthEngine();
           await engine.init();
-          presetManager = new PresetManager();
           setupOscilloscope();
-          populatePresets();
-          populateInstruments();
-          setupKeyboard();
-          setupFX();
-          setupWebMidi();
+          document.getElementById('audio-state-badge').className = 'badge on';
+          document.getElementById('audio-state-badge').innerText = 'Audio: Running';
           document.getElementById('btn-start-audio').disabled = true;
+        } else if (Tone.context.state !== 'running') {
+          await Tone.start();
+          document.getElementById('audio-state-badge').className = 'badge on';
+          document.getElementById('audio-state-badge').innerText = 'Audio: Running';
         }
+        return engine;
+      }
+
+      // Init Button
+      document.getElementById('btn-start-audio').addEventListener('click', async () => {
+        await ensureAudio();
       });
 
       function setupOscilloscope() {
+        if (analyzer) return;
         analyzer = new Tone.Waveform(256);
-        Tone.Destination.connect(analyzer);
+        Tone.getDestination().connect(analyzer);
         const canvas = document.getElementById('oscilloscope');
         const ctx = canvas.getContext('2d');
+        canvas.width = canvas.parentElement.clientWidth - 40;
+        canvas.height = 150;
         
         function draw() {
           requestAnimationFrame(draw);
@@ -288,8 +301,6 @@
         draw();
       }
 
-      let activeVoiceType = 'poly';
-
       function populatePresets() {
         const select = document.getElementById('preset-select');
         select.innerHTML = '<option value="">-- Select Preset --</option>';
@@ -301,14 +312,37 @@
           select.appendChild(opt);
         });
         
-        document.getElementById('btn-load-preset').addEventListener('click', () => {
+        document.getElementById('btn-load-preset').addEventListener('click', async () => {
+          const eng = await ensureAudio();
           const id = select.value;
           const p = presets.find(x => x.id === id);
           if (p) {
             document.getElementById('preset-desc').innerText = p.description || '';
             activeVoiceType = p.engineType;
-            if (engine && engine.loadPatch) engine.loadPatch(p);
+            if (eng && eng.loadPatch) {
+              eng.loadPatch(p);
+              syncFxSlidersFromRack();
+            }
             logMidi(`Loaded patch: ${p.name}`);
+          }
+        });
+      }
+
+      function syncFxSlidersFromRack() {
+        if (!engine || !engine.fxRack || !engine.fxRack.getConfig) return;
+        const cfg = engine.fxRack.getConfig();
+        const map = {
+          reverb: cfg.reverbWet,
+          chorus: cfg.chorusWet,
+          delay: cfg.delayWet,
+          gain: cfg.masterVolume
+        };
+        Object.entries(map).forEach(([k, val]) => {
+          const el = document.getElementById(`fx-${k}`);
+          const valEl = document.getElementById(`val-${k}`);
+          if (el && valEl) {
+            el.value = val;
+            valEl.innerText = Number(val).toFixed(2);
           }
         });
       }
@@ -341,9 +375,10 @@
       engines.forEach(eng => {
         const btnNote = document.createElement('button');
         btnNote.innerText = eng.name + ' ♪ C4';
-        btnNote.onclick = () => {
+        btnNote.onclick = async () => {
+          const e = await ensureAudio();
           activeVoiceType = eng.type;
-          if (engine) engine.playNote('C4', '8n', 0.8, eng.type);
+          e.playNote('C4', '8n', 0.8, eng.type);
           logMidi(`${eng.name} play note C4`);
         };
         engineContainer.appendChild(btnNote);
@@ -351,9 +386,10 @@
         if (eng.type !== 'drone' && eng.type !== 'membrane') {
           const btnChord = document.createElement('button');
           btnChord.innerText = eng.name + ' ♫ Am';
-          btnChord.onclick = () => {
+          btnChord.onclick = async () => {
+            const e = await ensureAudio();
             activeVoiceType = eng.type;
-            if (engine) engine.playChord(['A3', 'C4', 'E4'], '2n', 0.8, eng.type);
+            e.playChord(['A3', 'C4', 'E4'], '2n', 0.8, eng.type);
             logMidi(`${eng.name} play chord Am`);
           };
           engineContainer.appendChild(btnChord);
@@ -362,6 +398,7 @@
 
       // Sample instruments
       document.getElementById('btn-load-instrument').addEventListener('click', async () => {
+        const eng = await ensureAudio();
         const inst = document.getElementById('instrument-select').value;
         const status = document.getElementById('instrument-status');
         status.className = 'badge off';
@@ -369,20 +406,21 @@
         status.innerText = 'Loading...';
         
         try {
-          if (engine && engine.loadInstrument) {
-            await engine.loadInstrument(inst);
-            status.className = 'badge on';
-            status.style.background = '';
-            status.innerText = 'Loaded';
-            logMidi(`Loaded sample instrument: ${inst}`);
-          }
+          await eng.loadInstrument(inst);
+          status.className = 'badge on';
+          status.style.background = '';
+          status.innerText = 'Loaded';
+          activeVoiceType = 'sampler';
+          logMidi(`Loaded sample instrument: ${inst}`);
         } catch (e) {
+          status.className = 'badge off';
           status.innerText = 'Load error';
           console.error(e);
         }
       });
-      document.getElementById('btn-play-instrument').addEventListener('click', () => {
-        if (engine) engine.playNote('C4', '4n', 0.8, 'sampler');
+      document.getElementById('btn-play-instrument').addEventListener('click', async () => {
+        const eng = await ensureAudio();
+        eng.playNote('C4', '4n', 0.8, 'sampler');
         logMidi('Sampler play C4');
       });
 
@@ -397,6 +435,7 @@
       const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
       function setupKeyboard() {
         const kb = document.getElementById('keyboard');
+        kb.innerHTML = '';
         for (let octave = 3; octave <= 4; octave++) {
           notes.forEach(n => {
             const isBlack = n.includes('#');
@@ -419,12 +458,12 @@
       }
 
       const activeKeys = {};
-      function playNote(note, el) {
-        if (!engine) return;
+      async function playNote(note, el) {
+        const eng = await ensureAudio();
         if (!activeKeys[note]) {
           activeKeys[note] = true;
           if (el) el.classList.add('active');
-          const voice = engine.getVoice(activeVoiceType);
+          const voice = eng.getVoice(activeVoiceType);
           if (voice) voice.triggerAttack(note);
           logMidi(`Note On: ${note} (${activeVoiceType})`);
         }
@@ -486,12 +525,13 @@
           const el = document.getElementById(`fx-${fx}`);
           const valEl = document.getElementById(`val-${fx}`);
           if (el && valEl) {
-            el.addEventListener('input', e => {
+            el.addEventListener('input', async e => {
               const v = parseFloat(e.target.value);
               valEl.innerText = v.toFixed(2);
-              if (engine && engine.fxRack && engine.fxRack.setConfig) {
+              const eng = await ensureAudio();
+              if (eng && eng.fxRack && eng.fxRack.setConfig) {
                 const param = paramMap[fx];
-                engine.fxRack.setConfig({ [param]: v });
+                eng.fxRack.setConfig({ [param]: v });
               }
             });
           }
