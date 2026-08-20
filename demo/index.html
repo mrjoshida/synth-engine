@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Synth Engine — Interactive Demo</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>🎹 Synth Engine Demo</h1>
+  <p class="subtitle">Interactive testing environment for <code>@mrjoshida/synth-engine</code></p>
+
+  <div id="init-banner">
+    <button id="btn-init" class="btn btn-primary btn-lg">Click to Initialize Audio</button>
+  </div>
+
+  <div id="app" class="hidden">
+
+    <!-- Preset Selector -->
+    <section>
+      <h2>🎨 Preset Browser</h2>
+      <select id="preset-select"></select>
+      <span id="preset-desc" class="desc"></span>
+    </section>
+
+    <!-- Voice Tester -->
+    <section>
+      <h2>🔊 Voice Tester</h2>
+      <p class="desc">Click to trigger a test note (C4) or chord (Am) on each voice engine.</p>
+      <div id="voice-buttons" class="button-row"></div>
+    </section>
+
+    <!-- Sampler Instruments -->
+    <section>
+      <h2>🎵 Sampler Instruments</h2>
+      <select id="instrument-select"></select>
+      <span id="instrument-status" class="desc">Not loaded</span>
+      <button id="btn-load-instrument" class="btn">Load Instrument</button>
+      <button id="btn-play-sampler" class="btn" disabled>Play Sampler C4</button>
+    </section>
+
+    <!-- Mini Piano -->
+    <section>
+      <h2>🎹 Piano (C3–C5)</h2>
+      <div id="piano" class="piano"></div>
+    </section>
+
+    <!-- FX Controls -->
+    <section>
+      <h2>🏛️ FX Rack</h2>
+      <div class="controls-grid">
+        <label>Reverb Wet <input type="range" id="fx-reverb" min="0" max="100" value="35"> <span id="fx-reverb-val">0.35</span></label>
+        <label>Chorus Wet <input type="range" id="fx-chorus" min="0" max="100" value="25"> <span id="fx-chorus-val">0.25</span></label>
+        <label>Delay Wet <input type="range" id="fx-delay" min="0" max="100" value="20"> <span id="fx-delay-val">0.20</span></label>
+        <label>Master Volume <input type="range" id="fx-master" min="0" max="100" value="85"> <span id="fx-master-val">0.85</span></label>
+      </div>
+    </section>
+
+    <!-- Transport -->
+    <section>
+      <h2>⏱️ Transport</h2>
+      <div class="button-row">
+        <button id="btn-start" class="btn">Start</button>
+        <button id="btn-stop" class="btn">Stop</button>
+        <label>BPM <input type="number" id="bpm" value="120" min="30" max="300" style="width:60px"></label>
+      </div>
+    </section>
+
+    <!-- MIDI Status -->
+    <section>
+      <h2>🎶 Web MIDI</h2>
+      <div id="midi-status">Checking...</div>
+    </section>
+
+  </div>
+
+  <script type="module" src="main.ts"></script>
+</body>
+</html>

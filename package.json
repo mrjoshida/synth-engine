@@ -1,0 +1,38 @@
+{
+  "name": "@mrjoshida/synth-engine",
+  "version": "0.1.0",
+  "description": "Shared multi-engine synthesizer, Web MIDI manager, and FX library for FWDBIAS apps",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "demo": "vite demo",
+    "demo:build": "vite build demo",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "@mrjoshida/music-theory": "github:mrjoshida/music-theory",
+    "tone": "^15.1.22"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "tsup": "^8.3.6",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.0",
+    "vitest": "^3.0.5"
+  }
+}

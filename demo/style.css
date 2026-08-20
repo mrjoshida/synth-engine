@@ -1,0 +1,66 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #0f0f17;
+  color: #e0e0e8;
+  padding: 2rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+h1 { font-size: 1.8rem; margin-bottom: 0.25rem; color: #a78bfa; }
+h2 { font-size: 1.1rem; margin-bottom: 0.75rem; color: #818cf8; text-transform: uppercase; letter-spacing: 0.05em; }
+
+.subtitle { color: #6b7280; margin-bottom: 2rem; font-size: 0.9rem; }
+.desc { color: #6b7280; font-size: 0.8rem; display: block; margin-bottom: 0.5rem; }
+
+section { background: #1a1a2e; border: 1px solid #2d2d44; border-radius: 8px; padding: 1.25rem; margin-bottom: 1.5rem; }
+
+.hidden { display: none; }
+
+#init-banner { text-align: center; padding: 4rem 0; }
+
+.btn {
+  background: #2d2d44; color: #e0e0e8; border: 1px solid #3d3d5c;
+  padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem;
+  transition: all 0.15s;
+}
+.btn:hover { background: #3d3d5c; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary { background: #6366f1; border-color: #818cf8; color: white; font-weight: 600; }
+.btn-primary:hover { background: #4f46e5; }
+.btn-lg { font-size: 1.1rem; padding: 0.75rem 2rem; }
+
+.button-row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+
+select {
+  background: #2d2d44; color: #e0e0e8; border: 1px solid #3d3d5c;
+  padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; margin-bottom: 0.5rem;
+}
+
+input[type="range"] { width: 200px; accent-color: #6366f1; vertical-align: middle; margin: 0 0.5rem; }
+input[type="number"] { background: #2d2d44; color: #e0e0e8; border: 1px solid #3d3d5c; border-radius: 4px; padding: 0.25rem 0.5rem; font-size: 0.85rem; }
+
+.controls-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.controls-grid label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: #a0a0b8; }
+
+/* Piano */
+.piano { display: flex; position: relative; height: 140px; user-select: none; }
+.piano .white-key {
+  width: 40px; height: 140px; background: #f0f0f0; border: 1px solid #ccc;
+  border-radius: 0 0 4px 4px; cursor: pointer; z-index: 1; position: relative;
+  display: flex; align-items: flex-end; justify-content: center; padding-bottom: 6px;
+  font-size: 10px; color: #666; font-weight: 600;
+}
+.piano .white-key:hover { background: #e8e0ff; }
+.piano .white-key:active, .piano .white-key.active { background: #c4b5fd; }
+.piano .black-key {
+  width: 26px; height: 90px; background: #1a1a2e; border: 1px solid #333;
+  border-radius: 0 0 3px 3px; cursor: pointer; z-index: 2; position: absolute;
+  margin-left: -13px;
+}
+.piano .black-key:hover { background: #2d2d5c; }
+.piano .black-key:active, .piano .black-key.active { background: #4f46e5; }
+
+#midi-status { font-size: 0.85rem; color: #6b7280; }
