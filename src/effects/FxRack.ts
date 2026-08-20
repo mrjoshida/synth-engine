@@ -78,7 +78,7 @@ export class FxRack {
   public getConfig(): FxConfig {
     return {
       reverbWet: this.reverb ? Number(this.reverb.wet.value) : 0,
-      reverbDecay: 2.5,
+      reverbDecay: this.reverb && "roomSize" in this.reverb ? Number((this.reverb as any).roomSize.value) * 5 : 2.5,
       chorusWet: this.chorus ? Number(this.chorus.wet.value) : 0,
       chorusFrequency: this.chorus ? Number(this.chorus.frequency.value) : 1.5,
       chorusDepth: this.chorus ? Number(this.chorus.depth) : 0.6,

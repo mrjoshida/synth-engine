@@ -7,14 +7,20 @@ export class SamplerVoice extends BaseVoice {
   private currentInstrumentId: string | null = null;
   private isLoading = false;
   private onLoadCallbacks: (() => void)[] = [];
+  private activeLoadRequestId = 0;
 
   public async init(): Promise<void> {
     if (this.isInitialized) return;
     this.outputNode = new Tone.Gain(1.0);
+    if (this.sampler) {
+      this.sampler.connect(this.outputNode);
+    }
     this.isInitialized = true;
   }
 
   public async loadInstrument(config: SamplerInstrumentConfig): Promise<void> {
+    await this.init();
+
     if (this.sampler) {
       this.sampler.dispose();
       this.sampler = null;
@@ -22,14 +28,14 @@ export class SamplerVoice extends BaseVoice {
 
     this.isLoading = true;
     this.currentInstrumentId = config.id;
-    const activeLoadId = config.id;
+    const requestId = ++this.activeLoadRequestId;
     
     return new Promise((resolve) => {
       let settled = false;
       const onDone = () => {
         if (settled) return;
         settled = true;
-        if (this.currentInstrumentId === activeLoadId) {
+        if (this.activeLoadRequestId === requestId) {
           this.isLoading = false;
           this.onLoadCallbacks.forEach(cb => {
             try { cb(); } catch (e) { console.error(e); }
@@ -41,7 +47,7 @@ export class SamplerVoice extends BaseVoice {
       // Safety timeout: Never hang the caller if any network request is delayed
       const timeoutId = setTimeout(() => {
         if (!settled) {
-          if (this.currentInstrumentId === activeLoadId) {
+          if (this.activeLoadRequestId === requestId) {
             console.warn(`SamplerVoice: instrument "${config.id}" load timed out, readying available samples.`);
           }
           onDone();

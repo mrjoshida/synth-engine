@@ -146,6 +146,12 @@ describe("FxRack Unit Tests", () => {
     expect(config.masterVolume).toBe(1.0);
   });
 
+  it("should dynamically calculate reverbDecay based on Freeverb roomSize", () => {
+    const config = fxRack.getConfig();
+    // Default roomSize is 0.75 in Freeverb mock, so 0.75 * 5 = 3.75
+    expect(config.reverbDecay).toBeCloseTo(3.75);
+  });
+
   it("should dispose properly and clear nodes", () => {
     fxRack.dispose();
     const config = fxRack.getConfig();

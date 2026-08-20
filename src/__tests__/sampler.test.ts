@@ -76,6 +76,35 @@ describe("SamplerVoice", () => {
     expect(voice.isLoadingInstrument()).toBe(false);
   });
 
+  it("should handle rapid consecutive reload calls of the same instrument without callback leakage", async () => {
+    const voice = new SamplerVoice();
+    await voice.init();
+
+    let callbacksFired = 0;
+    voice.onLoad(() => {
+      callbacksFired++;
+    });
+
+    const p1 = voice.loadInstrument(BUILTIN_INSTRUMENTS["grand-piano"]);
+    const p2 = voice.loadInstrument(BUILTIN_INSTRUMENTS["grand-piano"]);
+
+    await Promise.all([p1, p2]);
+    expect(voice.getLoadedInstrumentId()).toBe("grand-piano");
+    expect(voice.isLoadingInstrument()).toBe(false);
+    // Only the second/active request should trigger the final onLoad callback once settled
+    expect(callbacksFired).toBe(1);
+  });
+
+  it("should auto-initialize output node when loadInstrument is called before init", async () => {
+    const voice = new SamplerVoice();
+    expect(voice.getOutput()).toBeNull();
+    
+    await voice.loadInstrument(BUILTIN_INSTRUMENTS["grand-piano"]);
+    expect(voice.getOutput()).not.toBeNull();
+    const mockSampler = (voice as any).sampler;
+    expect(mockSampler.connect).toHaveBeenCalledWith(voice.getOutput());
+  });
+
   it("should support specific note release as well as releaseAll", async () => {
     const voice = new SamplerVoice();
     await voice.init();
