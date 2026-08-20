@@ -13,13 +13,15 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "workbench.html"
   ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:cli": "node test-cli.mjs",
     "demo": "vite demo",
     "demo:build": "vite build demo",
     "prepare": "npm run build"

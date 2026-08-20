@@ -47,21 +47,37 @@ await sharedSynthEngine.loadInstrument("grand-piano");
 sharedSynthEngine.playChord(["A3", "C4", "E4"], "1n", 0.8, "sampler");
 ```
 
-## Interactive Demo
+## Standalone Testing (Zero Additional Tools / Dev Servers)
 
-Run the standalone testing workbench to test voices, presets, FX sliders, sampler instruments, and MIDI connectivity:
+### 1. Browser Workbench (`workbench.html`)
+Open [`workbench.html`](./workbench.html) directly in any modern browser (e.g. `open workbench.html` or double click the file). No local dev server, bundler, or build tool process is required.
+
+Features:
+- Live real-time audio oscilloscope / waveform display.
+- One-click trigger & preview for all 7 synthesis engines & 22 presets.
+- Sampled instrument loader (Grand Piano, Rhodes, Celesta, Nylon Guitar).
+- Playable 2-octave keyboard with mouse and computer keyboard hotkeys (`A-S-D-F...`).
+- Music theory scale degree and diatonic chord voicing player.
+- Live FX rack parameter modulation.
+- MIDI hardware monitor & `.mid` session file export.
+
+### 2. Standalone Terminal CLI (`test-cli.mjs`)
+Run headless sanity tests in any Node environment without a browser:
 
 ```bash
-npm run demo
+npm run test:cli
 ```
 
 ## Testing & Building
 
 ```bash
-# Run unit tests
+# Run unit test suite (Vitest)
 npm test
 
-# Build CJS, ESM, and TypeScript declarations
+# Run interactive Vite demo
+npm run demo
+
+# Build CJS, ESM, IIFE standalone bundle, and TypeScript declarations
 npm run build
 ```
 
