@@ -58,8 +58,9 @@ export class FMVoice extends BaseVoice {
 
   public triggerRelease(note?: string | string[], time?: number): void {
     if (!this.fmPoly) return;
-    if (note) {
-      this.fmPoly.triggerRelease(note, time);
+    const hasNote = note !== undefined && (!Array.isArray(note) || note.length > 0);
+    if (hasNote) {
+      this.fmPoly.triggerRelease(note!, time);
     } else {
       this.fmPoly.releaseAll(time);
     }

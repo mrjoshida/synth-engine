@@ -114,8 +114,25 @@ describe("SamplerVoice", () => {
     voice.triggerRelease("C4");
     expect(mockSampler.triggerRelease).toHaveBeenCalledWith("C4", undefined);
 
+    // Empty array should fall back to releaseAll
+    voice.triggerRelease([]);
+    expect(mockSampler.releaseAll).toHaveBeenCalled();
+
     voice.triggerRelease();
     expect(mockSampler.releaseAll).toHaveBeenCalled();
+  });
+
+  it("should cleanly dispose sampler, output node, and clear callbacks", async () => {
+    const voice = new SamplerVoice();
+    await voice.init();
+    voice.onLoad(() => {});
+    await voice.loadInstrument(BUILTIN_INSTRUMENTS["grand-piano"]);
+    
+    expect(voice.getLoadedInstrumentId()).toBe("grand-piano");
+    voice.dispose();
+    expect(voice.getLoadedInstrumentId()).toBeNull();
+    expect((voice as any).onLoadCallbacks).toEqual([]);
+    expect(voice.getOutput()).toBeNull();
   });
 });
 

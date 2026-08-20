@@ -206,12 +206,16 @@ describe("Patch Loading & State Isolation Unit Tests", () => {
     });
   });
 
-  it("should release specific notes on polyphonic voices when note is passed, and releaseAll when omitted", () => {
+  it("should release specific notes on polyphonic voices when note is passed, and releaseAll when omitted or empty", () => {
     const polyVoice = engine.polyVoice;
     const polySynth = (polyVoice as any).polySynth;
     
     polyVoice.triggerRelease("E4");
     expect(polySynth.triggerRelease).toHaveBeenCalledWith("E4", undefined);
+
+    // Empty array should trigger releaseAll
+    polyVoice.triggerRelease([]);
+    expect(polySynth.releaseAll).toHaveBeenCalled();
 
     polyVoice.triggerRelease();
     expect(polySynth.releaseAll).toHaveBeenCalled();
@@ -221,6 +225,10 @@ describe("Patch Loading & State Isolation Unit Tests", () => {
 
     fmVoice.triggerRelease("G4");
     expect(fmPoly.triggerRelease).toHaveBeenCalledWith("G4", undefined);
+
+    // Empty array should trigger releaseAll
+    fmVoice.triggerRelease([]);
+    expect(fmPoly.releaseAll).toHaveBeenCalled();
 
     fmVoice.triggerRelease();
     expect(fmPoly.releaseAll).toHaveBeenCalled();

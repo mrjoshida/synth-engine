@@ -54,25 +54,31 @@ export class SamplerVoice extends BaseVoice {
         }
       }, 5000);
 
-      this.sampler = new Tone.Sampler({
-        urls: config.sampleMap,
-        baseUrl: config.baseUrl,
-        onload: () => {
-          clearTimeout(timeoutId);
-          onDone();
-        },
-        onerror: (err) => {
-          clearTimeout(timeoutId);
-          console.warn(`SamplerVoice warning: failed to fetch some sample files for ${config.id}:`, err);
-          onDone();
-        }
-      });
+      try {
+        this.sampler = new Tone.Sampler({
+          urls: config.sampleMap,
+          baseUrl: config.baseUrl,
+          onload: () => {
+            clearTimeout(timeoutId);
+            onDone();
+          },
+          onerror: (err) => {
+            clearTimeout(timeoutId);
+            console.warn(`SamplerVoice warning: failed to fetch some sample files for ${config.id}:`, err);
+            onDone();
+          }
+        });
+      } catch (err) {
+        clearTimeout(timeoutId);
+        console.error(`SamplerVoice error instantiating Tone.Sampler for ${config.id}:`, err);
+        onDone();
+      }
 
       // Connect immediately to output node so triggers immediately produce audio
-      if (this.outputNode) {
+      if (this.outputNode && this.sampler) {
         this.sampler.connect(this.outputNode);
       }
-      if (config.volume !== undefined) {
+      if (config.volume !== undefined && this.sampler) {
         this.sampler.volume.value = config.volume;
       }
     });
@@ -111,8 +117,9 @@ export class SamplerVoice extends BaseVoice {
 
   public triggerRelease(note?: string | string[], time?: number): void {
     try {
-      if (note && this.sampler) {
-        this.sampler.triggerRelease(note, time);
+      const hasNote = note !== undefined && (!Array.isArray(note) || note.length > 0);
+      if (hasNote && this.sampler) {
+        this.sampler.triggerRelease(note!, time);
       } else {
         this.sampler?.releaseAll(time);
       }
@@ -136,6 +143,8 @@ export class SamplerVoice extends BaseVoice {
       this.outputNode.dispose();
       this.outputNode = null;
     }
+    this.onLoadCallbacks = [];
+    this.currentInstrumentId = null;
     this.isInitialized = false;
   }
 }

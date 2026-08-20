@@ -50,8 +50,9 @@ export class PolyVoice extends BaseVoice {
 
   public triggerRelease(note?: string | string[], time?: number): void {
     if (!this.polySynth) return;
-    if (note) {
-      this.polySynth.triggerRelease(note, time);
+    const hasNote = note !== undefined && (!Array.isArray(note) || note.length > 0);
+    if (hasNote) {
+      this.polySynth.triggerRelease(note!, time);
     } else {
       this.polySynth.releaseAll(time);
     }
