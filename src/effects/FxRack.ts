@@ -55,6 +55,9 @@ export class FxRack {
     if (cfg.reverbWet !== undefined && this.reverb) {
       this.reverb.wet.value = Math.max(0, Math.min(1.0, cfg.reverbWet));
     }
+    if (cfg.reverbDecay !== undefined && this.reverb && "roomSize" in this.reverb) {
+      (this.reverb as any).roomSize.value = Math.max(0.01, Math.min(1.0, cfg.reverbDecay / 5));
+    }
     if (cfg.chorusWet !== undefined && this.chorus) {
       this.chorus.wet.value = Math.max(0, Math.min(1.0, cfg.chorusWet));
     }

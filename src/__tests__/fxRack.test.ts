@@ -152,6 +152,12 @@ describe("FxRack Unit Tests", () => {
     expect(config.reverbDecay).toBeCloseTo(3.75);
   });
 
+  it("should dynamically set and update reverbDecay via roomSize mapping", () => {
+    fxRack.setConfig({ reverbDecay: 2.0 });
+    const config = fxRack.getConfig();
+    expect(config.reverbDecay).toBeCloseTo(2.0);
+  });
+
   it("should dispose properly and clear nodes", () => {
     fxRack.dispose();
     const config = fxRack.getConfig();

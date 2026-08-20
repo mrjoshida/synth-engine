@@ -158,6 +158,7 @@ describe("Patch Loading & State Isolation Unit Tests", () => {
       chorusFrequency: 4.0,
       chorusDepth: 0.9,
       reverbWet: 0.8,
+      reverbDecay: 1.0,
       masterVolume: 0.5
     });
 
@@ -165,6 +166,7 @@ describe("Patch Loading & State Isolation Unit Tests", () => {
     expect(beforePatch.delayTime).toBe("4n");
     expect(beforePatch.delayFeedback).toBe(0.8);
     expect(beforePatch.chorusFrequency).toBe(4.0);
+    expect(beforePatch.reverbDecay).toBeCloseTo(1.0);
 
     // 2. Load a patch with no FX sends specified
     const dryPatch = {
@@ -183,6 +185,7 @@ describe("Patch Loading & State Isolation Unit Tests", () => {
     expect(afterPatch.chorusFrequency).toBe(1.5);
     expect(afterPatch.chorusDepth).toBe(0.6);
     expect(afterPatch.reverbWet).toBe(0.15);
+    expect(afterPatch.reverbDecay).toBeCloseTo(3.75);
     expect(afterPatch.masterVolume).toBe(0.85);
   });
 
