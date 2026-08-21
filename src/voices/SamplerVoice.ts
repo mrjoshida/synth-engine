@@ -7,40 +7,81 @@ export class SamplerVoice extends BaseVoice {
   private currentInstrumentId: string | null = null;
   private isLoading = false;
   private onLoadCallbacks: (() => void)[] = [];
+  private activeLoadRequestId = 0;
 
   public async init(): Promise<void> {
     if (this.isInitialized) return;
     this.outputNode = new Tone.Gain(1.0);
+    if (this.sampler) {
+      this.sampler.connect(this.outputNode);
+    }
     this.isInitialized = true;
   }
 
   public async loadInstrument(config: SamplerInstrumentConfig): Promise<void> {
+    await this.init();
+    if (!this.isInitialized) return;
+
     if (this.sampler) {
       this.sampler.dispose();
       this.sampler = null;
     }
 
     this.isLoading = true;
+    const requestId = ++this.activeLoadRequestId;
     
     return new Promise((resolve) => {
-      this.sampler = new Tone.Sampler({
-        urls: config.sampleMap,
-        baseUrl: config.baseUrl,
-        onload: () => {
+      let settled = false;
+      const onDone = () => {
+        if (settled) return;
+        settled = true;
+        if (this.activeLoadRequestId === requestId && this.isInitialized) {
           this.isLoading = false;
-          if (this.sampler && this.outputNode) {
-            this.sampler.connect(this.outputNode);
-            if (config.volume !== undefined) {
-              this.sampler.volume.value = config.volume;
-            }
-          }
           this.currentInstrumentId = config.id;
-          
-          this.onLoadCallbacks.forEach(cb => cb());
-          
-          resolve();
+          this.onLoadCallbacks.forEach(cb => {
+            try { cb(); } catch (e) { console.error(e); }
+          });
         }
-      });
+        resolve();
+      };
+
+      // Safety timeout: Never hang the caller if any network request is delayed
+      const timeoutId = setTimeout(() => {
+        if (!settled) {
+          if (this.activeLoadRequestId === requestId) {
+            console.warn(`SamplerVoice: instrument "${config.id}" load timed out, readying available samples.`);
+          }
+          onDone();
+        }
+      }, 5000);
+
+      try {
+        this.sampler = new Tone.Sampler({
+          urls: config.sampleMap,
+          baseUrl: config.baseUrl,
+          onload: () => {
+            clearTimeout(timeoutId);
+            onDone();
+          },
+          onerror: (err) => {
+            clearTimeout(timeoutId);
+            console.warn(`SamplerVoice warning: failed to fetch some sample files for ${config.id}:`, err);
+            onDone();
+          }
+        });
+      } catch (err) {
+        clearTimeout(timeoutId);
+        console.error(`SamplerVoice error instantiating Tone.Sampler for ${config.id}:`, err);
+        onDone();
+      }
+
+      // Connect immediately to output node so triggers immediately produce audio
+      if (this.outputNode && this.sampler) {
+        this.sampler.connect(this.outputNode);
+      }
+      if (config.volume !== undefined && this.sampler) {
+        this.sampler.volume.value = config.volume;
+      }
     });
   }
 
@@ -75,9 +116,14 @@ export class SamplerVoice extends BaseVoice {
     }
   }
 
-  public triggerRelease(time?: number): void {
+  public triggerRelease(note?: string | string[], time?: number): void {
     try {
-      this.sampler?.releaseAll(time);
+      const hasNote = note !== undefined && (!Array.isArray(note) || note.length > 0);
+      if (hasNote && this.sampler) {
+        this.sampler.triggerRelease(note!, time);
+      } else {
+        this.sampler?.releaseAll(time);
+      }
     } catch (e) {
       console.warn("SamplerVoice failed to triggerRelease:", e);
     }
@@ -90,6 +136,7 @@ export class SamplerVoice extends BaseVoice {
   }
 
   public dispose(): void {
+    this.activeLoadRequestId++;
     if (this.sampler) {
       this.sampler.dispose();
       this.sampler = null;
@@ -98,6 +145,8 @@ export class SamplerVoice extends BaseVoice {
       this.outputNode.dispose();
       this.outputNode = null;
     }
+    this.onLoadCallbacks = [];
+    this.currentInstrumentId = null;
     this.isInitialized = false;
   }
 }

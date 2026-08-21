@@ -56,9 +56,14 @@ export class FMVoice extends BaseVoice {
     this.fmPoly.triggerAttack(note, time, velocity);
   }
 
-  public triggerRelease(time?: number): void {
+  public triggerRelease(note?: string | string[], time?: number): void {
     if (!this.fmPoly) return;
-    this.fmPoly.releaseAll(time);
+    const hasNote = note !== undefined && (!Array.isArray(note) || note.length > 0);
+    if (hasNote) {
+      this.fmPoly.triggerRelease(note!, time);
+    } else {
+      this.fmPoly.releaseAll(time);
+    }
   }
 
   public applyPatch(patch: SynthPatch): void {

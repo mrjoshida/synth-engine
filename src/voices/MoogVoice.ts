@@ -56,7 +56,7 @@ export class MoogVoice extends BaseVoice {
     this.synth.triggerAttack(singleNote, time, velocity);
   }
 
-  public triggerRelease(time?: number): void {
+  public triggerRelease(_note?: string | string[], time?: number): void {
     if (!this.synth) return;
     this.synth.triggerRelease(time);
   }

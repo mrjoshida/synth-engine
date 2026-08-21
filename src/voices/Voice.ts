@@ -20,7 +20,7 @@ export abstract class BaseVoice {
   public abstract init(): Promise<void>;
   public abstract triggerAttackRelease(note: string | string[], duration: string | number, time?: number, velocity?: number): void;
   public abstract triggerAttack(note: string | string[], time?: number, velocity?: number): void;
-  public abstract triggerRelease(time?: number): void;
+  public abstract triggerRelease(note?: string | string[], time?: number): void;
   public abstract applyPatch(patch: SynthPatch): void;
   public abstract dispose(): void;
 

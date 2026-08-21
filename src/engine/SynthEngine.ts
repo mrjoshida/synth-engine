@@ -17,7 +17,7 @@ import { FxRack } from "../effects/FxRack";
 import { WebMidiManager } from "../midi/WebMidiManager";
 import { MidiFileEncoder } from "../midi/MidiFileEncoder";
 import { PresetManager } from "../presets/PresetManager";
-import { SynthEngineType, MidiNoteEvent, SynthPatch } from "../types";
+import { SynthEngineType, MidiNoteEvent, SynthPatch, FxConfig } from "../types";
 
 export class SynthEngine {
   private initialized = false;
@@ -185,9 +185,20 @@ export class SynthEngine {
     }
     const voice = this.getVoice(patch.engineType);
     voice.applyPatch(patch);
-    if (patch.fxSends) {
-      this.fxRack.setConfig(patch.fxSends);
-    }
+    
+    // Always reset baseline FX sends first, then apply patch-specific sends
+    const baselineSends: Partial<FxConfig> = {
+      reverbWet: 0.15,
+      reverbDecay: 3.75,
+      chorusWet: 0.0,
+      chorusFrequency: 1.5,
+      chorusDepth: 0.6,
+      delayWet: 0.0,
+      delayTime: "8n.",
+      delayFeedback: 0.3,
+      masterVolume: 0.85
+    };
+    this.fxRack.setConfig({ ...baselineSends, ...(patch.fxSends || {}) });
   }
 
   public startTransport(): void {

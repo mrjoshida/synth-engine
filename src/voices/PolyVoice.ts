@@ -48,9 +48,14 @@ export class PolyVoice extends BaseVoice {
     this.polySynth.triggerAttack(note, time, velocity);
   }
 
-  public triggerRelease(time?: number): void {
+  public triggerRelease(note?: string | string[], time?: number): void {
     if (!this.polySynth) return;
-    this.polySynth.releaseAll(time);
+    const hasNote = note !== undefined && (!Array.isArray(note) || note.length > 0);
+    if (hasNote) {
+      this.polySynth.triggerRelease(note!, time);
+    } else {
+      this.polySynth.releaseAll(time);
+    }
   }
 
   public applyPatch(patch: SynthPatch): void {

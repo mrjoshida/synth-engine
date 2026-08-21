@@ -13,13 +13,16 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "workbench.html"
   ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:cli": "node test-cli.mjs",
+    "workbench": "npx serve -l 5175 .",
     "demo": "vite demo",
     "demo:build": "vite build demo",
     "prepare": "npm run build"
@@ -30,6 +33,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
+    "jsdom": "^30.0.1",
+    "standardized-audio-context-mock": "^10.0.1",
     "tsup": "^8.3.6",
     "typescript": "^5.7.3",
     "vite": "^6.0.0",

@@ -37,7 +37,7 @@ export class PluckVoice extends BaseVoice {
     this.triggerAttackRelease(note, "8n", time, velocity);
   }
 
-  public triggerRelease(_time?: number): void {
+  public triggerRelease(_note?: string | string[], _time?: number): void {
     // Pluck decays naturally
   }
 

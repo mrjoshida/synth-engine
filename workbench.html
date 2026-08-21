@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Synth Engine Workbench</title>
+  <style>
+    :root {
+      --bg: #1e1e1e;
+      --panel: #2a2a2a;
+      --text: #e0e0e0;
+      --accent: #00d2ff;
+      --accent-hover: #3a86ff;
+      --danger: #ff4757;
+      --success: #2ed573;
+      --border: #333;
+    }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    h1, h2, h3 { margin-top: 0; }
+    .panel {
+      background: var(--panel);
+      padding: 20px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .flex-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .flex-col { display: flex; flex-direction: column; gap: 10px; }
+    button {
+      background: var(--accent);
+      color: #000;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    button:hover { background: var(--accent-hover); color: #fff; }
+    button:disabled { background: #555; cursor: not-allowed; }
+    select, input[type="range"] {
+      padding: 5px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: #333;
+      color: #fff;
+    }
+    .badge {
+      padding: 4px 8px;
+      border-radius: 12px;
+      font-size: 0.8em;
+      font-weight: bold;
+    }
+    .badge.off { background: var(--danger); color: #fff; }
+    .badge.on { background: var(--success); color: #000; }
+    
+    #oscilloscope {
+      width: 100%;
+      height: 150px;
+      background: #000;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    .keyboard {
+      display: flex;
+      height: 120px;
+      position: relative;
+    }
+    .key {
+      border: 1px solid #000;
+      border-radius: 0 0 4px 4px;
+      cursor: pointer;
+      position: relative;
+    }
+    .key.white {
+      background: #fff;
+      width: 40px;
+      height: 100%;
+      z-index: 1;
+    }
+    .key.white.active { background: #ccc; }
+    .key.black {
+      background: #000;
+      width: 24px;
+      height: 60%;
+      margin-left: -12px;
+      margin-right: -12px;
+      z-index: 2;
+    }
+    .key.black.active { background: #444; }
+    .key-label {
+      position: absolute;
+      bottom: 5px;
+      width: 100%;
+      text-align: center;
+      color: #000;
+      font-size: 10px;
+    }
+    .key.black .key-label { color: #fff; }
+
+    #midi-log {
+      height: 100px;
+      overflow-y: auto;
+      background: #111;
+      padding: 10px;
+      font-family: monospace;
+      font-size: 12px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="error-banner" style="display:none; background: var(--danger); padding: 10px; color: white; border-radius: 4px;">
+    <strong>Error:</strong> Failed to load Tone.js or SynthEngine. Make sure you have built the bundle first via <code>npm run build</code>!
+  </div>
+
+  <div class="panel">
+    <div class="flex-row" style="justify-content: space-between;">
+      <h2>Header & Init Banner</h2>
+      <div class="flex-row">
+        <span id="audio-state-badge" class="badge off">Audio: Suspended</span>
+        <span id="master-vol-badge" class="badge on">Vol: 0dB (Limiter On)</span>
+      </div>
+    </div>
+    <div class="flex-row" style="margin-top: 10px;">
+      <button id="btn-start-audio">Start Audio Context</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Oscilloscope Waveform</h2>
+    <canvas id="oscilloscope"></canvas>
+  </div>
+
+  <div class="panel">
+    <h2>Preset Browser</h2>
+    <div class="flex-row">
+      <select id="preset-select"></select>
+      <button id="btn-load-preset">Load Preset</button>
+      <span id="preset-desc" style="font-style: italic; color: #aaa;"></span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Voice Engine Bench</h2>
+    <div class="flex-row" id="engine-buttons">
+      <!-- Generated via JS -->
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Sample-Based Instruments</h2>
+    <div class="flex-row">
+      <select id="instrument-select">
+        <option value="grand-piano">Grand Piano</option>
+        <option value="electric-piano">Rhodes</option>
+        <option value="celesta">Celesta</option>
+        <option value="nylon-guitar">Nylon Guitar</option>
+      </select>
+      <button id="btn-load-instrument">Load Instrument</button>
+      <span id="instrument-status" class="badge off">Not Loaded</span>
+      <button id="btn-play-instrument">Test Play</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Interactive 2-Octave Piano Keyboard (C3–C5)</h2>
+    <p style="font-size: 0.8em; color: #aaa;">Use Mouse or Computer Keyboard (QWERTY... for white, 23567... for black)</p>
+    <div class="keyboard" id="keyboard">
+      <!-- Generated via JS -->
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Music Theory & Voicings Bench</h2>
+    <div class="flex-row">
+      <select id="theory-key">
+        <option value="C">C</option><option value="C#">C#</option><option value="D">D</option><option value="D#">D#</option><option value="E">E</option><option value="F">F</option><option value="F#">F#</option><option value="G">G</option><option value="G#">G#</option><option value="A">A</option><option value="A#">A#</option><option value="B">B</option>
+      </select>
+      <select id="theory-mode">
+        <option value="major">Major</option><option value="minor">Minor</option><option value="dorian">Dorian</option><option value="mixolydian">Mixolydian</option>
+      </select>
+      <select id="theory-degree">
+        <option value="1">I</option><option value="2">ii</option><option value="3">iii</option><option value="4">IV</option><option value="5">V</option><option value="6">vi</option><option value="7">vii°</option>
+      </select>
+      <label><input type="checkbox" id="theory-7th"> 7th Chord</label>
+      <button id="btn-play-scale-degree">Play Scale Degree</button>
+      <button id="btn-play-diatonic-chord">Play Diatonic Chord</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Real-Time FX Rack Controls</h2>
+    <div class="flex-col" style="max-width: 400px;">
+      <div class="flex-row"><label style="width:100px;">Reverb Wet</label><input type="range" id="fx-reverb" min="0" max="1" step="0.01" value="0"><span id="val-reverb">0</span></div>
+      <div class="flex-row"><label style="width:100px;">Chorus Wet</label><input type="range" id="fx-chorus" min="0" max="1" step="0.01" value="0"><span id="val-chorus">0</span></div>
+      <div class="flex-row"><label style="width:100px;">Delay Wet</label><input type="range" id="fx-delay" min="0" max="1" step="0.01" value="0"><span id="val-delay">0</span></div>
+      <div class="flex-row"><label style="width:100px;">Master Gain</label><input type="range" id="fx-gain" min="-60" max="6" step="1" value="0"><span id="val-gain">0 dB</span></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Transport & MIDI File Export</h2>
+    <div class="flex-row">
+      <label>BPM: <input type="number" id="bpm-input" min="30" max="300" value="120"></label>
+      <button id="btn-transport-start">Start Transport</button>
+      <button id="btn-transport-stop">Stop</button>
+      <button id="btn-export-midi">Export Session to .mid</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Web MIDI Monitor</h2>
+    <p>Hardware Output: <span id="midi-hardware-status">Detecting...</span></p>
+    <div id="midi-log"></div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/15.1.22/Tone.js" onerror="document.getElementById('error-banner').style.display='block'"></script>
+  <script src="./dist/synth-engine.global.js" onerror="document.getElementById('error-banner').style.display='block'"></script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      if (!window.Tone || !window.SynthEngineModule) {
+        document.getElementById('error-banner').style.display = 'block';
+        return;
+      }
+
+      const { SynthEngine, PresetManager, BUILTIN_INSTRUMENTS } = window.SynthEngineModule;
+      let engine = null;
+      let presetManager = new PresetManager();
+      let analyzer = null;
+      let activeVoiceType = 'poly';
+
+      // Auto-populate UI immediately
+      populatePresets();
+      populateInstruments();
+      setupKeyboard();
+      setupFX();
+      setupWebMidi();
+
+      async function ensureAudio() {
+        if (!engine) {
+          await Tone.start();
+          engine = new SynthEngine();
+          await engine.init();
+          setupOscilloscope();
+          document.getElementById('audio-state-badge').className = 'badge on';
+          document.getElementById('audio-state-badge').innerText = 'Audio: Running';
+          document.getElementById('btn-start-audio').disabled = true;
+        } else if (Tone.context.state !== 'running') {
+          await Tone.start();
+          document.getElementById('audio-state-badge').className = 'badge on';
+          document.getElementById('audio-state-badge').innerText = 'Audio: Running';
+        }
+        return engine;
+      }
+
+      // Init Button
+      document.getElementById('btn-start-audio').addEventListener('click', async () => {
+        await ensureAudio();
+      });
+
+      function setupOscilloscope() {
+        if (analyzer) return;
+        analyzer = new Tone.Waveform(256);
+        Tone.getDestination().connect(analyzer);
+        const canvas = document.getElementById('oscilloscope');
+        const ctx = canvas.getContext('2d');
+        canvas.width = canvas.parentElement.clientWidth - 40;
+        canvas.height = 150;
+        
+        function draw() {
+          requestAnimationFrame(draw);
+          if (!analyzer) return;
+          const width = canvas.width;
+          const height = canvas.height;
+          ctx.clearRect(0, 0, width, height);
+          
+          const values = analyzer.getValue();
+          ctx.beginPath();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = '#00d2ff';
+          for (let i = 0; i < values.length; i++) {
+            const x = (i / values.length) * width;
+            const y = ((values[i] + 1) / 2) * height;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+        }
+        draw();
+      }
+
+      function populatePresets() {
+        const select = document.getElementById('preset-select');
+        select.innerHTML = '<option value="">-- Select Preset --</option>';
+        const presets = presetManager.getAll();
+        presets.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.id;
+          opt.innerText = `${p.name} (${p.engineType})`;
+          select.appendChild(opt);
+        });
+        
+        document.getElementById('btn-load-preset').addEventListener('click', async () => {
+          const eng = await ensureAudio();
+          const id = select.value;
+          const p = presets.find(x => x.id === id);
+          if (p) {
+            document.getElementById('preset-desc').innerText = p.description || '';
+            activeVoiceType = p.engineType;
+            if (eng && eng.loadPatch) {
+              eng.loadPatch(p);
+              syncFxSlidersFromRack();
+            }
+            logMidi(`Loaded patch: ${p.name}`);
+          }
+        });
+      }
+
+      function syncFxSlidersFromRack() {
+        if (!engine || !engine.fxRack || !engine.fxRack.getConfig) return;
+        const cfg = engine.fxRack.getConfig();
+        const map = {
+          reverb: cfg.reverbWet,
+          chorus: cfg.chorusWet,
+          delay: cfg.delayWet,
+          gain: cfg.masterVolume
+        };
+        Object.entries(map).forEach(([k, val]) => {
+          const el = document.getElementById(`fx-${k}`);
+          const valEl = document.getElementById(`val-${k}`);
+          if (el && valEl) {
+            el.value = val;
+            valEl.innerText = Number(val).toFixed(2);
+          }
+        });
+      }
+
+      function populateInstruments() {
+        const select = document.getElementById('instrument-select');
+        if (select && BUILTIN_INSTRUMENTS) {
+          select.innerHTML = '';
+          Object.entries(BUILTIN_INSTRUMENTS).forEach(([id, cfg]) => {
+            const opt = document.createElement('option');
+            opt.value = id;
+            opt.innerText = cfg.name;
+            select.appendChild(opt);
+          });
+        }
+      }
+
+      // Voice Engines
+      const engines = [
+        { name: 'Poly (Analog Saw)', type: 'poly' },
+        { name: 'FM (Bells/Brass)', type: 'fm' },
+        { name: 'Pluck (Physical)', type: 'pluck' },
+        { name: 'Moog (Ladder Bass)', type: 'moog' },
+        { name: 'Drone (Sub Harmonic)', type: 'drone' },
+        { name: 'Membrane (Percussion)', type: 'membrane' },
+        { name: 'Sampler (Soundfont)', type: 'sampler' }
+      ];
+      const engineContainer = document.getElementById('engine-buttons');
+      engineContainer.innerHTML = '';
+      engines.forEach(eng => {
+        const btnNote = document.createElement('button');
+        btnNote.innerText = eng.name + ' ♪ C4';
+        btnNote.onclick = async () => {
+          const e = await ensureAudio();
+          activeVoiceType = eng.type;
+          e.playNote('C4', '8n', 0.8, eng.type);
+          logMidi(`${eng.name} play note C4`);
+        };
+        engineContainer.appendChild(btnNote);
+        
+        if (eng.type !== 'drone' && eng.type !== 'membrane') {
+          const btnChord = document.createElement('button');
+          btnChord.innerText = eng.name + ' ♫ Am';
+          btnChord.onclick = async () => {
+            const e = await ensureAudio();
+            activeVoiceType = eng.type;
+            e.playChord(['A3', 'C4', 'E4'], '2n', 0.8, eng.type);
+            logMidi(`${eng.name} play chord Am`);
+          };
+          engineContainer.appendChild(btnChord);
+        }
+      });
+
+      // Sample instruments
+      document.getElementById('btn-load-instrument').addEventListener('click', async () => {
+        const eng = await ensureAudio();
+        const inst = document.getElementById('instrument-select').value;
+        const status = document.getElementById('instrument-status');
+        status.className = 'badge off';
+        status.style.background = '#f39c12';
+        status.innerText = 'Loading...';
+        
+        try {
+          await eng.loadInstrument(inst);
+          status.className = 'badge on';
+          status.style.background = '';
+          status.innerText = 'Loaded';
+          activeVoiceType = 'sampler';
+          logMidi(`Loaded sample instrument: ${inst}`);
+        } catch (e) {
+          status.className = 'badge off';
+          status.innerText = 'Load error';
+          console.error(e);
+        }
+      });
+      document.getElementById('btn-play-instrument').addEventListener('click', async () => {
+        const eng = await ensureAudio();
+        eng.playNote('C4', '4n', 0.8, 'sampler');
+        logMidi('Sampler play C4');
+      });
+
+      // Keyboard
+      const keyMap = {
+        'q': 'C3', '2': 'C#3', 'w': 'D3', '3': 'D#3', 'e': 'E3',
+        'r': 'F3', '5': 'F#3', 't': 'G3', '6': 'G#3', 'y': 'A3', '7': 'A#3', 'u': 'B3',
+        'z': 'C4', 's': 'C#4', 'x': 'D4', 'd': 'D#4', 'c': 'E4',
+        'v': 'F4', 'g': 'F#4', 'b': 'G4', 'h': 'G#4', 'n': 'A4', 'j': 'A#4', 'm': 'B4'
+      };
+      
+      const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+      function setupKeyboard() {
+        const kb = document.getElementById('keyboard');
+        kb.innerHTML = '';
+        for (let octave = 3; octave <= 4; octave++) {
+          notes.forEach(n => {
+            const isBlack = n.includes('#');
+            const key = document.createElement('div');
+            key.className = `key ${isBlack ? 'black' : 'white'}`;
+            key.dataset.note = n + octave;
+            
+            const label = document.createElement('div');
+            label.className = 'key-label';
+            label.innerText = n;
+            key.appendChild(label);
+            
+            key.onmousedown = () => playNote(key.dataset.note, key);
+            key.onmouseup = () => stopNote(key.dataset.note, key);
+            key.onmouseleave = () => stopNote(key.dataset.note, key);
+            
+            kb.appendChild(key);
+          });
+        }
+      }
+
+      const activeKeys = {};
+      async function playNote(note, el) {
+        if (activeKeys[note]) return;
+        activeKeys[note] = true;
+        if (el) el.classList.add('active');
+        const eng = await ensureAudio();
+        if (!activeKeys[note]) return; // Released while audio context was initializing
+        const voice = eng.getVoice(activeVoiceType);
+        if (voice) voice.triggerAttack(note);
+        logMidi(`Note On: ${note} (${activeVoiceType})`);
+      }
+      function stopNote(note, el) {
+        if (!engine) return;
+        if (activeKeys[note]) {
+          activeKeys[note] = false;
+          if (el) el.classList.remove('active');
+          const voice = engine.getVoice(activeVoiceType);
+          if (voice && typeof voice.triggerRelease === 'function') {
+            voice.triggerRelease(note);
+          }
+          logMidi(`Note Off: ${note}`);
+        }
+      }
+      
+      window.addEventListener('keydown', e => {
+        const note = keyMap[e.key.toLowerCase()];
+        if (note && !e.repeat) {
+          const el = document.querySelector(`.key[data-note="${note}"]`);
+          playNote(note, el);
+        }
+      });
+      window.addEventListener('keyup', e => {
+        const note = keyMap[e.key.toLowerCase()];
+        if (note) {
+          const el = document.querySelector(`.key[data-note="${note}"]`);
+          stopNote(note, el);
+        }
+      });
+
+      // Theory
+      document.getElementById('btn-play-scale-degree').addEventListener('click', () => {
+        if (engine && engine.playScaleDegree) {
+          const k = document.getElementById('theory-key').value;
+          const m = document.getElementById('theory-mode').value;
+          const d = parseInt(document.getElementById('theory-degree').value);
+          engine.playScaleDegree(k, m, d);
+        }
+      });
+      document.getElementById('btn-play-diatonic-chord').addEventListener('click', () => {
+        if (engine && engine.playChordVoicing) {
+          const k = document.getElementById('theory-key').value;
+          const m = document.getElementById('theory-mode').value;
+          const d = parseInt(document.getElementById('theory-degree').value);
+          const seventh = document.getElementById('theory-7th').checked;
+          engine.playChordVoicing(k, m, d, seventh);
+        }
+      });
+
+      // FX
+      function setupFX() {
+        const paramMap = {
+          reverb: 'reverbWet',
+          chorus: 'chorusWet',
+          delay: 'delayWet',
+          gain: 'masterVolume'
+        };
+        ['reverb', 'chorus', 'delay', 'gain'].forEach(fx => {
+          const el = document.getElementById(`fx-${fx}`);
+          const valEl = document.getElementById(`val-${fx}`);
+          if (el && valEl) {
+            el.addEventListener('input', async e => {
+              const v = parseFloat(e.target.value);
+              valEl.innerText = v.toFixed(2);
+              const eng = await ensureAudio();
+              if (eng && eng.fxRack && eng.fxRack.setConfig) {
+                const param = paramMap[fx];
+                eng.fxRack.setConfig({ [param]: v });
+              }
+            });
+          }
+        });
+      }
+
+      // Transport
+      document.getElementById('btn-transport-start').addEventListener('click', () => {
+        Tone.Transport.start();
+        Tone.Transport.bpm.value = parseFloat(document.getElementById('bpm-input').value);
+      });
+      document.getElementById('btn-transport-stop').addEventListener('click', () => Tone.Transport.stop());
+      document.getElementById('bpm-input').addEventListener('input', e => {
+        Tone.Transport.bpm.value = parseFloat(e.target.value);
+      });
+      document.getElementById('btn-export-midi').addEventListener('click', () => {
+        if (engine && engine.exportMidiBlob) {
+          const blob = engine.exportMidiBlob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'session.mid';
+          a.click();
+        }
+      });
+
+      // Midi Log
+      function logMidi(msg) {
+        const log = document.getElementById('midi-log');
+        const div = document.createElement('div');
+        div.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        log.appendChild(div);
+        log.scrollTop = log.scrollHeight;
+      }
+      function setupWebMidi() {
+        if (navigator.requestMIDIAccess) {
+          navigator.requestMIDIAccess().then(access => {
+            if (access.outputs.size > 0) {
+              document.getElementById('midi-hardware-status').innerText = 'Connected';
+            } else {
+              document.getElementById('midi-hardware-status').innerText = 'No outputs detected';
+            }
+          }).catch(() => {
+            document.getElementById('midi-hardware-status').innerText = 'Access denied';
+          });
+        } else {
+          document.getElementById('midi-hardware-status').innerText = 'Web MIDI not supported';
+        }
+      }
+
+    });
+  </script>
+</body>
+</html>
