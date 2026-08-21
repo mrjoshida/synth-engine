@@ -134,6 +134,23 @@ describe("SamplerVoice", () => {
     expect((voice as any).onLoadCallbacks).toEqual([]);
     expect(voice.getOutput()).toBeNull();
   });
+
+  it("should invalidate in-flight load requests when disposed during loading", async () => {
+    const voice = new SamplerVoice();
+    await voice.init();
+
+    let callbackFired = false;
+    voice.onLoad(() => {
+      callbackFired = true;
+    });
+
+    const loadPromise = voice.loadInstrument(BUILTIN_INSTRUMENTS["grand-piano"]);
+    voice.dispose();
+
+    await loadPromise;
+    expect(callbackFired).toBe(false);
+    expect(voice.getLoadedInstrumentId()).toBeNull();
+  });
 });
 
 describe("BUILTIN_INSTRUMENTS", () => {

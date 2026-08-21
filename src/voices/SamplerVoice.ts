@@ -20,6 +20,7 @@ export class SamplerVoice extends BaseVoice {
 
   public async loadInstrument(config: SamplerInstrumentConfig): Promise<void> {
     await this.init();
+    if (!this.isInitialized) return;
 
     if (this.sampler) {
       this.sampler.dispose();
@@ -27,7 +28,6 @@ export class SamplerVoice extends BaseVoice {
     }
 
     this.isLoading = true;
-    this.currentInstrumentId = config.id;
     const requestId = ++this.activeLoadRequestId;
     
     return new Promise((resolve) => {
@@ -35,8 +35,9 @@ export class SamplerVoice extends BaseVoice {
       const onDone = () => {
         if (settled) return;
         settled = true;
-        if (this.activeLoadRequestId === requestId) {
+        if (this.activeLoadRequestId === requestId && this.isInitialized) {
           this.isLoading = false;
+          this.currentInstrumentId = config.id;
           this.onLoadCallbacks.forEach(cb => {
             try { cb(); } catch (e) { console.error(e); }
           });
@@ -135,6 +136,7 @@ export class SamplerVoice extends BaseVoice {
   }
 
   public dispose(): void {
+    this.activeLoadRequestId++;
     if (this.sampler) {
       this.sampler.dispose();
       this.sampler = null;
