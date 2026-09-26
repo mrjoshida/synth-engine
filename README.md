@@ -47,6 +47,92 @@ await sharedSynthEngine.loadInstrument("grand-piano");
 sharedSynthEngine.playChord(["A3", "C4", "E4"], "1n", 0.8, "sampler");
 ```
 
+## Sustained Notes & Interactive Play (v0.2.0)
+
+```typescript
+import { SynthEngine } from "@mrjoshida/synth-engine";
+
+const engine = new SynthEngine();
+await engine.init({ latencyHint: "interactive" });
+
+// Audio Context unlock on user gesture
+await engine.unlock();
+
+// Note On with sustained hold (accepts MIDI note number or pitch string)
+engine.noteOn(60, 0.8, { voiceType: "poly", channel: 1 }); // C4
+engine.noteOn("G4", 0.7);
+
+// Note Off
+engine.noteOff(60);
+engine.noteOff("G4");
+
+// Emergency stop: silences all 7 engine voices and sends MIDI All Notes Off
+engine.panic();
+```
+
+## Audio Lifecycle Management
+
+```typescript
+// Monitor Web Audio state changes (suspended, running, closed, interrupted)
+const unsubscribe = engine.onAudioStateChange((state) => {
+  console.log("Audio context state:", state);
+});
+
+// Current state
+console.log(engine.getAudioState());
+
+// Explicit resume
+await engine.resume();
+```
+
+## Web MIDI Enhancements
+
+```typescript
+import { parseMidiMessage, WebMidiManager } from "@mrjoshida/synth-engine";
+
+const midi = new WebMidiManager();
+await midi.requestAccess({ sysex: true });
+
+// Listen to incoming MIDI messages (parsed automatically)
+midi.onMessage((event) => {
+  if (event.type === "noteon") {
+    console.log(`Note on: ${event.note} vel: ${event.velocity}`);
+  }
+});
+
+// Safe SysEx send
+midi.sendSysex([0xF0, 0x00, 0x20, 0x29, 0x02, 0x0C, 0xF7]);
+
+// Emergency All Notes Off (CC 123 + CC 120)
+midi.allNotesOff([1, 2]); // specific channels, or omit for all 16 channels
+```
+
+## Testing Double (`@mrjoshida/synth-engine/testing`)
+
+An in-memory Web MIDI test double is exported via the `./testing` subpath:
+
+```typescript
+import { installFakeMidi, FakeMidiAccess, FakeMIDIInput, FakeMIDIOutput } from "@mrjoshida/synth-engine/testing";
+
+const input = new FakeMIDIInput("in-1", "Mock Launchpad X In");
+const output = new FakeMIDIOutput("out-1", "Mock Launchpad X Out");
+
+const { access, restore } = installFakeMidi(globalThis, {
+  initialInputs: [input],
+  initialOutputs: [output],
+  sysexAllowed: true
+});
+
+// Emit incoming MIDI to listeners
+input.emit(new Uint8Array([0x90, 60, 100]));
+
+// Inspect sent MIDI
+console.log(output.sentMessages);
+
+// Restore original navigator.requestMIDIAccess
+restore();
+```
+
 ## Standalone Testing (Zero Additional Tools / Dev Servers)
 
 ### 1. Browser Workbench (`workbench.html`)

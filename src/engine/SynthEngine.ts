@@ -3,7 +3,8 @@ import {
   getScalePitchNotes,
   getScaleDegreePitch,
   getScaleDegreeChordPitches,
-  pitchToMidiNumber
+  pitchToMidiNumber,
+  midiNumberToPitch
 } from "@mrjoshida/music-theory";
 import { PolyVoice } from "../voices/PolyVoice";
 import { FMVoice } from "../voices/FMVoice";
@@ -40,10 +41,26 @@ export class SynthEngine {
   private sessionEvents: MidiNoteEvent[] = [];
   private sessionStartTime: number = 0;
 
-  public async init(): Promise<void> {
+  // Audio State Listeners
+  private audioStateListeners: Set<(state: "suspended" | "running" | "closed" | "interrupted") => void> = new Set();
+  private attachedAudioContext: AudioContext | null = null;
+  private audioContextHandler: (() => void) | null = null;
+
+  public async init(opts?: { latencyHint?: AudioContextLatencyCategory | number }): Promise<void> {
     if (this.initialized) return;
 
-    await Tone.start();
+    if (opts?.latencyHint !== undefined && ("getContext" in Tone) && ("setContext" in Tone) && typeof (Tone as any).getContext === "function" && typeof (Tone as any).setContext === "function") {
+      const currentContext = (Tone as any).getContext();
+      if (currentContext && currentContext.state !== "running") {
+        (Tone as any).setContext(new Tone.Context({ latencyHint: opts.latencyHint as any }));
+      }
+    }
+
+    this.ensureAudioContextListener();
+
+    if (typeof (Tone as any).start === "function") {
+      await Tone.start();
+    }
     await this.fxRack.init();
 
     const fxInput = this.fxRack.getInput();
@@ -75,6 +92,94 @@ export class SynthEngine {
     this.initialized = true;
   }
 
+  public async unlock(): Promise<boolean> {
+    try {
+      if (("start" in Tone) && typeof (Tone as any).start === "function") {
+        await Tone.start();
+      }
+      if (("getContext" in Tone) && typeof (Tone as any).getContext === "function") {
+        const toneCtx = (Tone as any).getContext();
+        const raw = toneCtx?.rawContext as AudioContext | undefined;
+        if (raw && "resume" in raw && (raw as AudioContext).state !== "running") {
+          await (raw as AudioContext).resume();
+        }
+      }
+      return this.getAudioState() === "running";
+    } catch {
+      return false;
+    }
+  }
+
+  public async resume(): Promise<void> {
+    if (("start" in Tone) && typeof (Tone as any).start === "function") {
+      await Tone.start();
+    }
+    if (("getContext" in Tone) && typeof (Tone as any).getContext === "function") {
+      const toneCtx = (Tone as any).getContext();
+      const raw = toneCtx?.rawContext as AudioContext | undefined;
+      if (raw && "resume" in raw && (raw as AudioContext).state !== "running") {
+        await (raw as AudioContext).resume();
+      }
+    }
+  }
+
+  public getAudioState(): "suspended" | "running" | "closed" | "interrupted" {
+    if (!("getContext" in Tone) || typeof (Tone as any).getContext !== "function") {
+      return "suspended";
+    }
+    const toneCtx = (Tone as any).getContext();
+    const raw = toneCtx?.rawContext as AudioContext | undefined;
+    const state = (raw?.state ?? toneCtx?.state) as string;
+    if (state === "running" || state === "suspended" || state === "closed" || state === "interrupted") {
+      return state;
+    }
+    return "suspended";
+  }
+
+  public onAudioStateChange(
+    cb: (state: "suspended" | "running" | "closed" | "interrupted") => void
+  ): () => void {
+    this.audioStateListeners.add(cb);
+    this.ensureAudioContextListener();
+
+    return () => {
+      this.audioStateListeners.delete(cb);
+      if (this.audioStateListeners.size === 0 && this.attachedAudioContext && this.audioContextHandler) {
+        if (typeof this.attachedAudioContext.removeEventListener === "function") {
+          this.attachedAudioContext.removeEventListener("statechange", this.audioContextHandler);
+        }
+        this.attachedAudioContext = null;
+        this.audioContextHandler = null;
+      }
+    };
+  }
+
+  private ensureAudioContextListener(): void {
+    if (!("getContext" in Tone) || typeof (Tone as any).getContext !== "function") return;
+    const toneCtx = (Tone as any).getContext();
+    if (!toneCtx) return;
+    const raw = toneCtx.rawContext as AudioContext | undefined;
+    if (!raw || typeof raw.addEventListener !== "function") return;
+
+    if (this.attachedAudioContext !== raw) {
+      if (this.attachedAudioContext && this.audioContextHandler && typeof this.attachedAudioContext.removeEventListener === "function") {
+        this.attachedAudioContext.removeEventListener("statechange", this.audioContextHandler);
+      }
+      this.attachedAudioContext = raw;
+      this.audioContextHandler = () => {
+        const state = this.getAudioState();
+        this.audioStateListeners.forEach((listener) => {
+          try {
+            listener(state);
+          } catch (e) {
+            console.error("Error in audio state listener:", e);
+          }
+        });
+      };
+      raw.addEventListener("statechange", this.audioContextHandler);
+    }
+  }
+
   public isReady(): boolean {
     return this.initialized;
   }
@@ -89,6 +194,109 @@ export class SynthEngine {
       case "membrane": return this.membraneVoice;
       case "sampler": return this.samplerVoice;
     }
+  }
+
+  /**
+   * Triggers a sustained note-on event on the specified voice and forwards to Web MIDI.
+   *
+   * Note on caller responsibility: The caller is responsible for refcounting or deduplicating
+   * duplicate noteOn calls for the same pitch (e.g. across multiple overlapping pads or keys in Fretmancer)
+   * before calling noteOff.
+   *
+   * @param note MIDI note number (0-127) or pitch notation string (e.g. 'C4')
+   * @param velocity Note velocity normalized to 0..1 (default: 0.8)
+   * @param opts Optional configuration for voiceType (default: 'poly') and MIDI channel (default: 1)
+   */
+  public noteOn(
+    note: number | string,
+    velocity: number = 0.8,
+    opts?: { voiceType?: SynthEngineType; channel?: number }
+  ): void {
+    if (!this.initialized) return;
+
+    const voiceType = opts?.voiceType ?? "poly";
+    const channel = opts?.channel ?? 1;
+
+    let pitch: string;
+    let midiNum: number;
+
+    if (typeof note === "number") {
+      midiNum = Math.max(0, Math.min(127, Math.round(note)));
+      pitch = midiNumberToPitch(midiNum);
+    } else {
+      pitch = note;
+      midiNum = pitchToMidiNumber(note);
+    }
+
+    const clampedVelocity = Math.max(0, Math.min(1, velocity));
+    const voice = this.getVoice(voiceType);
+    voice.triggerAttack(pitch, undefined, clampedVelocity);
+
+    this.webMidi.sendNoteOn(midiNum, clampedVelocity, channel);
+  }
+
+  /**
+   * Releases a sustained note on the specified voice and forwards to Web MIDI.
+   *
+   * @param note MIDI note number (0-127) or pitch notation string (e.g. 'C4')
+   * @param opts Optional configuration for voiceType (default: 'poly') and MIDI channel (default: 1)
+   */
+  public noteOff(
+    note: number | string,
+    opts?: { voiceType?: SynthEngineType; channel?: number }
+  ): void {
+    if (!this.initialized) return;
+
+    const voiceType = opts?.voiceType ?? "poly";
+    const channel = opts?.channel ?? 1;
+
+    let pitch: string;
+    let midiNum: number;
+
+    if (typeof note === "number") {
+      midiNum = Math.max(0, Math.min(127, Math.round(note)));
+      pitch = midiNumberToPitch(midiNum);
+    } else {
+      pitch = note;
+      midiNum = pitchToMidiNumber(note);
+    }
+
+    const voice = this.getVoice(voiceType);
+    voice.triggerRelease(pitch);
+
+    this.webMidi.sendNoteOff(midiNum, channel);
+  }
+
+  /**
+   * Releases all active voices across all 7 engine types.
+   *
+   * @param time Optional release time scheduling
+   */
+  public releaseAll(time?: any): void {
+    const voices = [
+      this.polyVoice,
+      this.fmVoice,
+      this.pluckVoice,
+      this.moogVoice,
+      this.droneVoice,
+      this.membraneVoice,
+      this.samplerVoice
+    ];
+    for (const v of voices) {
+      try {
+        v.triggerRelease(undefined, time);
+      } catch (e) {
+        console.warn("Error releasing voice:", e);
+      }
+    }
+  }
+
+  /**
+   * Emergency panic: immediately silences all 7 voices at Tone.now() and sends all-notes-off CCs.
+   */
+  public panic(): void {
+    this.releaseAll(Tone.now());
+    this.webMidi.allNotesOff();
   }
 
   public playNote(
@@ -242,6 +450,15 @@ export class SynthEngine {
   }
 
   public dispose(): void {
+    if (this.attachedAudioContext && this.audioContextHandler) {
+      if (typeof this.attachedAudioContext.removeEventListener === "function") {
+        this.attachedAudioContext.removeEventListener("statechange", this.audioContextHandler);
+      }
+      this.attachedAudioContext = null;
+      this.audioContextHandler = null;
+    }
+    this.audioStateListeners.clear();
+
     this.polyVoice.dispose();
     this.fmVoice.dispose();
     this.pluckVoice.dispose();
