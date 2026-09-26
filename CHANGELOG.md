@@ -41,3 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `FakeMIDIOutput`: Simulates MIDI output recording transmitted messages in `sentMessages`.
   - `FakeMidiAccess`: In-memory `MIDIAccess` implementation supporting dynamic port connect/disconnect and sysex configuration.
   - `installFakeMidi(target?, options?)`: Installs test double onto `navigator.requestMIDIAccess` with custom options and provides `restore()` cleanup.
+
+### Fixed
+- Reattach `midimessage` event listener when a selected MIDI input port is disconnected and reconnected (hot-plug robustness).
+- Avoid attaching `AudioContext` `statechange` listener during `SynthEngine.init()` when zero subscribers are registered.

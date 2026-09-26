@@ -68,6 +68,7 @@ export class WebMidiManager {
   private portListeners: Set<(info?: { inputs: MidiDevice[]; outputs: MidiDevice[] }) => void> = new Set();
   private messageListeners: Set<(event: ParsedMidiEvent) => void> = new Set();
   private attachedInputHandlers: Map<string, (e: any) => void> = new Map();
+  private attachedInputPorts: Map<string, MIDIInput> = new Map();
   private portFilter: ((device: MidiDevice) => boolean) | null = null;
   public sysexEnabled = false;
   private isInitialized = false;
@@ -134,6 +135,13 @@ export class WebMidiManager {
 
   private refreshPorts(): void {
     if (!this.midiAccess) return;
+
+    for (const [id] of this.attachedInputHandlers) {
+      const port = this.midiAccess.inputs.get(id);
+      if (!port || port.state === "disconnected") {
+        this.detachInputListener(id);
+      }
+    }
 
     const rawOutputs: MidiDevice[] = [];
     this.midiAccess.outputs.forEach((port) => {
@@ -230,11 +238,17 @@ export class WebMidiManager {
   private attachInputListener(id: string | null): void {
     if (!id || !this.midiAccess) return;
     const input = this.midiAccess.inputs.get(id);
-    if (!input) return;
+    if (!input || input.state === "disconnected") return;
+
+    const currentPort = this.attachedInputPorts.get(id);
+    if (currentPort && currentPort !== input) {
+      this.detachInputListener(id);
+    }
 
     if (!this.attachedInputHandlers.has(id)) {
       const handler = (e: any) => this.handleIncomingMidi(id, e);
       this.attachedInputHandlers.set(id, handler);
+      this.attachedInputPorts.set(id, input);
       if (typeof input.addEventListener === "function") {
         input.addEventListener("midimessage", handler);
       } else {
@@ -245,7 +259,7 @@ export class WebMidiManager {
 
   private detachInputListener(id: string | null): void {
     if (!id || !this.midiAccess) return;
-    const input = this.midiAccess.inputs.get(id);
+    const input = this.attachedInputPorts.get(id) ?? this.midiAccess.inputs.get(id);
     const handler = this.attachedInputHandlers.get(id);
     if (input && handler) {
       if (typeof input.removeEventListener === "function") {
@@ -255,6 +269,7 @@ export class WebMidiManager {
       }
     }
     this.attachedInputHandlers.delete(id);
+    this.attachedInputPorts.delete(id);
   }
 
   private syncInputListeners(): void {

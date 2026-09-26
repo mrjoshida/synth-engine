@@ -334,5 +334,39 @@ describe("WebMidiManager v0.2.0 Additions (S4 & S5)", () => {
       fakeIn1.emit(new Uint8Array([0x80, 60, 0]));
       expect(messageListener).toHaveBeenCalledTimes(1);
     });
+
+    it("reattaches midimessage listener when selected input is disconnected and reconnected", async () => {
+      const manager = new WebMidiManager();
+      await manager.init();
+
+      manager.selectInput("in-1");
+      const messageListener = vi.fn();
+      manager.onMessage(messageListener);
+
+      fakeIn1.emit(new Uint8Array([0x90, 60, 100]));
+      expect(messageListener).toHaveBeenCalledTimes(1);
+
+      fakeAccess.removeInput("in-1");
+      expect(manager.getInputs()).toHaveLength(0);
+
+      const reconnectedIn1 = fakeAccess.addInput({
+        id: "in-1",
+        name: "Launchpad X LPX MIDI In",
+        manufacturer: "Novation"
+      });
+      expect(manager.getInputs()).toHaveLength(1);
+      expect(manager.getSelectedInputId()).toBe("in-1");
+
+      reconnectedIn1.emit(new Uint8Array([0x90, 64, 110]));
+      expect(messageListener).toHaveBeenCalledTimes(2);
+      expect(messageListener).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          type: "noteon",
+          note: 64,
+          velocity: 110,
+          portId: "in-1"
+        })
+      );
+    });
   });
 });

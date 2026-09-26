@@ -314,5 +314,15 @@ describe("SynthEngine v0.2.0 Additions (S1, S2, S3)", () => {
       activeContext.current.rawContext.dispatchEvent({ type: "statechange" });
       expect(callback).not.toHaveBeenCalled();
     });
+
+    it("does not attach AudioContext statechange listener during init if no subscribers exist", async () => {
+      const freshEngine = new SynthEngine();
+      const addEventListenerSpy = vi.spyOn(activeContext.current.rawContext, "addEventListener");
+
+      await freshEngine.init();
+
+      expect(addEventListenerSpy).not.toHaveBeenCalledWith("statechange", expect.any(Function));
+      freshEngine.dispose();
+    });
   });
 });

@@ -155,6 +155,7 @@ export class SynthEngine {
   }
 
   private ensureAudioContextListener(): void {
+    if (this.audioStateListeners.size === 0) return;
     if (!("getContext" in Tone) || typeof (Tone as any).getContext !== "function") return;
     const toneCtx = (Tone as any).getContext();
     if (!toneCtx) return;
