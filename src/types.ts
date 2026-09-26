@@ -93,3 +93,25 @@ export interface MidiDevice {
   manufacturer?: string;
   state: "connected" | "disconnected";
 }
+
+export type MidiEventType =
+  | "noteon"
+  | "noteoff"
+  | "cc"
+  | "polyaftertouch"
+  | "channelpressure"
+  | "sysex"
+  | "other";
+
+export interface ParsedMidiEvent {
+  type: MidiEventType;
+  channel?: number;
+  note?: number;
+  controller?: number;
+  velocity?: number;
+  value?: number;
+  data: Uint8Array;
+  raw?: Uint8Array;
+  timeStamp: number;
+  portId: string;
+}
