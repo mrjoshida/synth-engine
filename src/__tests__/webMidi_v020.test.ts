@@ -368,5 +368,74 @@ describe("WebMidiManager v0.2.0 Additions (S4 & S5)", () => {
         })
       );
     });
+
+    it("after calling requestAccess twice, one statechange must trigger exactly one refreshPorts, and one incoming note must be delivered exactly once", async () => {
+      const manager = new WebMidiManager();
+
+      // First requestAccess call
+      await manager.requestAccess({ sysex: false });
+      manager.selectInput("in-1");
+
+      const messageListener = vi.fn();
+      manager.onMessage(messageListener);
+
+      const portsListener = vi.fn();
+      manager.onPortsChanged(portsListener);
+
+      // Second requestAccess call (e.g. sysex upgrade)
+      await manager.requestAccess({ sysex: true });
+
+      // Clear invocation history from initialization
+      portsListener.mockClear();
+      messageListener.mockClear();
+
+      // Trigger one statechange on FakeMidiAccess
+      fakeAccess.fireStateChange();
+
+      // Exactly one refreshPorts must be triggered
+      expect(portsListener).toHaveBeenCalledTimes(1);
+
+      // Emit one incoming note
+      fakeIn1.emit(new Uint8Array([0x90, 60, 100]));
+
+      // Note must be delivered exactly once
+      expect(messageListener).toHaveBeenCalledTimes(1);
+      expect(messageListener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "noteon",
+          note: 60,
+          velocity: 100,
+          portId: "in-1"
+        })
+      );
+    });
+
+    it("cleans up statechange listener from previous MIDIAccess when new instance is returned", async () => {
+      const access1 = new FakeMidiAccess({ inputs: [fakeIn1], outputs: [fakeOut1] });
+      const access2 = new FakeMidiAccess({ inputs: [fakeIn1], outputs: [fakeOut1] });
+
+      let currentAccess = access1;
+      (globalThis as any).navigator.requestMIDIAccess = async () => currentAccess as unknown as MIDIAccess;
+
+      const manager = new WebMidiManager();
+      await manager.requestAccess();
+
+      const portsListener = vi.fn();
+      manager.onPortsChanged(portsListener);
+
+      // Switch to access2 and request access again
+      currentAccess = access2;
+      await manager.requestAccess({ sysex: true });
+
+      portsListener.mockClear();
+
+      // Firing statechange on the previous MIDIAccess (access1) must NOT trigger refreshPorts
+      access1.fireStateChange();
+      expect(portsListener).not.toHaveBeenCalled();
+
+      // Firing statechange on current MIDIAccess (access2) triggers refreshPorts once
+      access2.fireStateChange();
+      expect(portsListener).toHaveBeenCalledTimes(1);
+    });
   });
 });

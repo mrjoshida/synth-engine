@@ -72,6 +72,10 @@ export class WebMidiManager {
   private portFilter: ((device: MidiDevice) => boolean) | null = null;
   public sysexEnabled = false;
   private isInitialized = false;
+  private attachedMidiAccess: MIDIAccess | null = null;
+  private handleStateChange = (): void => {
+    this.refreshPorts();
+  };
 
   public async init(opts?: { sysex?: boolean }): Promise<boolean> {
     if (this.isInitialized && (opts?.sysex === undefined || opts.sysex === this.sysexEnabled)) {
@@ -87,14 +91,15 @@ export class WebMidiManager {
     }
 
     const wantSysex = opts?.sysex ?? false;
+    let newAccess: MIDIAccess;
     if (wantSysex) {
       try {
-        this.midiAccess = await nav.requestMIDIAccess({ sysex: true });
+        newAccess = await nav.requestMIDIAccess({ sysex: true });
         this.sysexEnabled = true;
       } catch (err) {
         // Fall back to sysex: false if rejected
         try {
-          this.midiAccess = await nav.requestMIDIAccess({ sysex: false });
+          newAccess = await nav.requestMIDIAccess({ sysex: false });
           this.sysexEnabled = false;
         } catch (fallbackErr) {
           console.warn("Web MIDI access not available:", fallbackErr);
@@ -103,7 +108,7 @@ export class WebMidiManager {
       }
     } else {
       try {
-        this.midiAccess = await nav.requestMIDIAccess({ sysex: false });
+        newAccess = await nav.requestMIDIAccess({ sysex: false });
         this.sysexEnabled = false;
       } catch (err) {
         console.warn("Web MIDI access not available:", err);
@@ -111,7 +116,7 @@ export class WebMidiManager {
       }
     }
 
-    this.setupMidiAccess();
+    this.setupMidiAccess(newAccess);
     this.isInitialized = true;
     return true;
   }
@@ -120,17 +125,39 @@ export class WebMidiManager {
     return this.isInitialized && this.midiAccess !== null;
   }
 
-  private setupMidiAccess(): void {
-    if (!this.midiAccess) return;
+  private setupMidiAccess(newAccess?: MIDIAccess): void {
+    const accessToAttach = newAccess ?? this.midiAccess;
+
+    // Remove listener from the previously attached MIDIAccess (if any)
+    if (this.attachedMidiAccess && this.attachedMidiAccess !== accessToAttach) {
+      if (typeof this.attachedMidiAccess.removeEventListener === "function") {
+        this.attachedMidiAccess.removeEventListener("statechange", this.handleStateChange);
+      } else if ((this.attachedMidiAccess as any).onstatechange === this.handleStateChange) {
+        (this.attachedMidiAccess as any).onstatechange = null;
+      }
+    }
+
+    this.midiAccess = accessToAttach;
+    if (!this.midiAccess) {
+      this.attachedMidiAccess = null;
+      return;
+    }
+
+    // Remove before adding to avoid duplicate listeners on the same instance
+    if (typeof this.midiAccess.removeEventListener === "function") {
+      this.midiAccess.removeEventListener("statechange", this.handleStateChange);
+    } else if ((this.midiAccess as any).onstatechange === this.handleStateChange) {
+      (this.midiAccess as any).onstatechange = null;
+    }
 
     this.refreshPorts();
 
-    // Use addEventListener instead of onstatechange assignment
     if (typeof this.midiAccess.addEventListener === "function") {
-      this.midiAccess.addEventListener("statechange", () => {
-        this.refreshPorts();
-      });
+      this.midiAccess.addEventListener("statechange", this.handleStateChange);
+    } else {
+      (this.midiAccess as any).onstatechange = this.handleStateChange;
     }
+    this.attachedMidiAccess = this.midiAccess;
   }
 
   private refreshPorts(): void {
@@ -258,8 +285,8 @@ export class WebMidiManager {
   }
 
   private detachInputListener(id: string | null): void {
-    if (!id || !this.midiAccess) return;
-    const input = this.attachedInputPorts.get(id) ?? this.midiAccess.inputs.get(id);
+    if (!id) return;
+    const input = this.attachedInputPorts.get(id) ?? this.midiAccess?.inputs.get(id);
     const handler = this.attachedInputHandlers.get(id);
     if (input && handler) {
       if (typeof input.removeEventListener === "function") {

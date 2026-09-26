@@ -1,6 +1,6 @@
 {
   "name": "@mrjoshida/synth-engine",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Shared multi-engine synthesizer, Web MIDI manager, and FX library for FWDBIAS apps",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
