@@ -1,29 +1,23 @@
-import * as Tone from "tone";
-import { BaseVoice } from "./Voice";
-import { SynthPatch } from "../types";
+/**
+ * @file MoogVoice implementation with PooledVoice.
+ */
 
-export class MoogVoice extends BaseVoice {
-  private synth: Tone.MonoSynth | null = null;
+import * as Tone from "tone";
+import { PooledVoice } from "./PooledVoice";
+import { SynthPatch } from "../types";
+import { toToneOscillator, setToneParam } from "./helpers";
+import { getEffectiveParam } from "../params/patch";
+
+export class MoogVoice extends PooledVoice<Tone.MonoSynth> {
+  protected readonly engine = "moog" as const;
   private saturation: Tone.Chebyshev | null = null;
 
-  public async init(): Promise<void> {
-    if (this.isInitialized) return;
-
-    this.outputNode = new Tone.Gain(1.0);
-    this.saturation = new Tone.Chebyshev(2);
-
-    this.synth = new Tone.MonoSynth({
-      oscillator: { type: "sawtooth" },
-      envelope: {
-        attack: 0.015,
-        decay: 0.35,
-        sustain: 0.4,
-        release: 0.6
-      },
+  protected createSynth(): Tone.MonoSynth {
+    return new Tone.MonoSynth({
       filter: {
         Q: 4.5,
         type: "lowpass",
-        rolloff: -24
+        rolloff: -24,
       },
       filterEnvelope: {
         attack: 0.02,
@@ -32,67 +26,55 @@ export class MoogVoice extends BaseVoice {
         release: 0.8,
         baseFrequency: 180,
         octaves: 3.5,
-        exponent: 2
-      }
+        exponent: 2,
+      },
     });
-
-    this.synth.chain(this.saturation, this.outputNode);
-    this.isInitialized = true;
   }
 
-  public triggerAttackRelease(note: string | string[], duration: string | number, time?: number, velocity: number = 0.85): void {
-    if (!this.synth) return;
-    try {
-      const singleNote = Array.isArray(note) ? note[0] : note;
-      this.synth.triggerAttackRelease(singleNote, duration, time, velocity);
-    } catch (e) {
-      console.error("MoogVoice trigger error:", e);
+  protected buildChain(output: Tone.Gain): Tone.InputNode {
+    this.saturation = new Tone.Chebyshev(2);
+    this.saturation.connect(output);
+    return this.saturation;
+  }
+
+  protected releaseSeconds(_synth: Tone.MonoSynth): number {
+    const patch = this.currentPatch();
+    const envRel = Number(getEffectiveParam(patch, "envelope.release"));
+    return Math.max(envRel, 0.8);
+  }
+
+  protected applySynth(synth: Tone.MonoSynth, patch: SynthPatch, smooth?: boolean): void {
+    const oscConfig = toToneOscillator({
+      type: getEffectiveParam(patch, "oscillator.type") as any,
+      count: patch.oscillator?.count,
+      spread: patch.oscillator?.spread,
+    });
+    (synth as any).set({ oscillator: oscConfig });
+
+    const attack = Number(getEffectiveParam(patch, "envelope.attack"));
+    const decay = Number(getEffectiveParam(patch, "envelope.decay"));
+    const sustain = Number(getEffectiveParam(patch, "envelope.sustain"));
+    const release = Number(getEffectiveParam(patch, "envelope.release"));
+    (synth as any).set({ envelope: { attack, decay, sustain, release } });
+
+    const freq = Number(getEffectiveParam(patch, "filter.frequency"));
+    const q = Number(getEffectiveParam(patch, "filter.Q"));
+    if (synth.filter) {
+      setToneParam(synth.filter.frequency, freq, smooth);
+      setToneParam(synth.filter.Q, q, smooth);
     }
   }
 
-  public triggerAttack(note: string | string[], time?: number, velocity: number = 0.85): void {
-    if (!this.synth) return;
-    const singleNote = Array.isArray(note) ? note[0] : note;
-    this.synth.triggerAttack(singleNote, time, velocity);
-  }
-
-  public triggerRelease(_note?: string | string[], time?: number): void {
-    if (!this.synth) return;
-    this.synth.triggerRelease(time);
-  }
-
-  public applyPatch(patch: SynthPatch): void {
-    if (!this.synth) return;
-
-    if (patch.oscillator) {
-      (this.synth as any).set({ oscillator: { type: patch.oscillator.type } });
-    }
-
-    if (patch.envelope) {
-      (this.synth as any).set({ envelope: patch.envelope });
-    }
-
-    if (patch.filter) {
-      (this.synth as any).set({
-        filter: {
-          frequency: patch.filter.frequency,
-          Q: patch.filter.Q ?? 4.5
-        }
-      });
-    }
-
-    if (patch.moogParams && this.saturation) {
-      this.saturation.order = Math.max(1, Math.min(10, Math.round(patch.moogParams.drive * 5)));
+  protected override applyChain(patch: SynthPatch, _smooth?: boolean): void {
+    const drive = Number(getEffectiveParam(patch, "moogParams.drive"));
+    if (this.saturation && !Number.isNaN(drive)) {
+      this.saturation.order = Math.max(1, Math.min(10, Math.round(drive * 5)));
     }
   }
 
-  public dispose(): void {
-    this.synth?.dispose();
+  public override dispose(): void {
+    super.dispose();
     this.saturation?.dispose();
-    this.outputNode?.dispose();
-    this.synth = null;
     this.saturation = null;
-    this.outputNode = null;
-    this.isInitialized = false;
   }
 }

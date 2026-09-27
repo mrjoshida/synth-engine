@@ -169,70 +169,70 @@ describe("SynthEngine v0.2.0 Additions (S1, S2, S3)", () => {
 
   describe("S1: Sustained Notes (noteOn / noteOff)", () => {
     it("noteOn with MIDI note number converts to pitch name and triggers attack & MIDI", () => {
-      const attackSpy = vi.spyOn(engine.polyVoice, "triggerAttack");
+      const startSpy = vi.spyOn(engine.polyVoice, "startNote");
       const midiSpy = vi.spyOn(engine.webMidi, "sendNoteOn");
 
       // 60 is C4
       engine.noteOn(60, 0.7, { voiceType: "poly", channel: 1 });
 
-      expect(attackSpy).toHaveBeenCalledWith("C4", undefined, 0.7);
+      expect(startSpy).toHaveBeenCalledWith("1:60", "C4", 0.7);
       expect(midiSpy).toHaveBeenCalledWith(60, 0.7, 1);
     });
 
     it("noteOn with pitch string converts to MIDI number and triggers attack & MIDI", () => {
-      const attackSpy = vi.spyOn(engine.moogVoice, "triggerAttack");
+      const startSpy = vi.spyOn(engine.moogVoice, "startNote");
       const midiSpy = vi.spyOn(engine.webMidi, "sendNoteOn");
 
       // A4 is 69
       engine.noteOn("A4", 0.9, { voiceType: "moog", channel: 3 });
 
-      expect(attackSpy).toHaveBeenCalledWith("A4", undefined, 0.9);
+      expect(startSpy).toHaveBeenCalledWith("3:69", "A4", 0.9);
       expect(midiSpy).toHaveBeenCalledWith(69, 0.9, 3);
     });
 
     it("noteOn clamps velocity to 0..1 range", () => {
-      const attackSpy = vi.spyOn(engine.polyVoice, "triggerAttack");
+      const startSpy = vi.spyOn(engine.polyVoice, "startNote");
       const midiSpy = vi.spyOn(engine.webMidi, "sendNoteOn");
 
       engine.noteOn("C4", 1.5);
-      expect(attackSpy).toHaveBeenCalledWith("C4", undefined, 1.0);
+      expect(startSpy).toHaveBeenCalledWith("1:60", "C4", 1.0);
       expect(midiSpy).toHaveBeenCalledWith(60, 1.0, 1);
 
       engine.noteOn("C4", -0.5);
-      expect(attackSpy).toHaveBeenCalledWith("C4", undefined, 0.0);
+      expect(startSpy).toHaveBeenCalledWith("1:60", "C4", 0.0);
       expect(midiSpy).toHaveBeenCalledWith(60, 0.0, 1);
     });
 
     it("noteOff with MIDI note number converts to pitch and triggers release & MIDI", () => {
-      const releaseSpy = vi.spyOn(engine.polyVoice, "triggerRelease");
+      const stopSpy = vi.spyOn(engine.polyVoice, "stopNote");
       const midiSpy = vi.spyOn(engine.webMidi, "sendNoteOff");
 
       engine.noteOff(60, { voiceType: "poly", channel: 1 });
 
-      expect(releaseSpy).toHaveBeenCalledWith("C4");
+      expect(stopSpy).toHaveBeenCalledWith("1:60");
       expect(midiSpy).toHaveBeenCalledWith(60, 1);
     });
 
     it("noteOff with pitch string triggers release & MIDI", () => {
-      const releaseSpy = vi.spyOn(engine.fmVoice, "triggerRelease");
+      const stopSpy = vi.spyOn(engine.fmVoice, "stopNote");
       const midiSpy = vi.spyOn(engine.webMidi, "sendNoteOff");
 
       engine.noteOff("D3", { voiceType: "fm", channel: 2 });
 
-      expect(releaseSpy).toHaveBeenCalledWith("D3");
+      expect(stopSpy).toHaveBeenCalledWith("2:50");
       expect(midiSpy).toHaveBeenCalledWith(50, 2);
     });
 
     it("does nothing when not initialized", () => {
       const freshEngine = new SynthEngine();
-      const attackSpy = vi.spyOn(freshEngine.polyVoice, "triggerAttack");
-      const releaseSpy = vi.spyOn(freshEngine.polyVoice, "triggerRelease");
+      const startSpy = vi.spyOn(freshEngine.polyVoice, "startNote");
+      const stopSpy = vi.spyOn(freshEngine.polyVoice, "stopNote");
 
       freshEngine.noteOn(60);
       freshEngine.noteOff(60);
 
-      expect(attackSpy).not.toHaveBeenCalled();
-      expect(releaseSpy).not.toHaveBeenCalled();
+      expect(startSpy).not.toHaveBeenCalled();
+      expect(stopSpy).not.toHaveBeenCalled();
     });
   });
 

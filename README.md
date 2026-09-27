@@ -174,3 +174,53 @@ npm run build
 ## License
 
 MIT
+
+## Patches, Presets and Parameters (v0.4.0)
+
+v0.4.0 introduces unified patch state management, full polyphony across synthesis engines, and parameter specification definitions.
+
+### Parameter Inspection & UI Bindings
+
+Inspect parameter metadata, ranges, display units, and engine compatibility:
+
+```typescript
+import { PARAM_SPECS, getParamSpecs, getParamSpec, clampParam } from "@mrjoshida/synth-engine";
+
+// Get all parameters supported by the Pluck engine
+const pluckSpecs = getParamSpecs("pluck");
+
+// Look up a specific parameter spec
+const cutoffSpec = getParamSpec("filter.frequency");
+```
+
+### Preset & Parameter Control on SynthEngine
+
+```typescript
+import { sharedSynthEngine } from "@mrjoshida/synth-engine";
+
+// Load a preset by id
+sharedSynthEngine.loadPreset("moog-sub-thunder");
+
+// Get a deep copy of the current active patch
+const currentPatch = sharedSynthEngine.getPatch();
+
+// Update a parameter with automatic clamping and audio smoothing
+sharedSynthEngine.setParam("filter.frequency", 1800);
+```
+
+### Sanitizing Untrusted Input
+
+Safely sanitize user-supplied or network-loaded JSON patches against specifications:
+
+```typescript
+import { sanitizePatch } from "@mrjoshida/synth-engine";
+
+const safePatch = sanitizePatch(untrustedInput);
+if (safePatch) {
+  sharedSynthEngine.loadPatch(safePatch);
+}
+```
+
+### Full Polyphony Across Engines
+
+Voices for `pluck`, `moog`, `drone`, and `membrane` now use dynamic voice pooling (`VoiceAllocator`) supporting chords and multi-finger polyphony up to 12 voices each.

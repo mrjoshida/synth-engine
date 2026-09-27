@@ -178,4 +178,21 @@ describe("FxRack Unit Tests", () => {
     expect(config.delayWet).toBe(0);
     expect(config.chorusWet).toBe(0);
   });
+
+  it("ramps numeric delayTime when smoothing and assigns tempo strings directly", () => {
+    const delayTime = { value: "8n." as string | number, rampTo: vi.fn() };
+    (fxRack as any).delay.delayTime = delayTime;
+
+    fxRack.setConfig({ delayTime: 0.25 }, { smooth: true });
+    expect(delayTime.rampTo).toHaveBeenCalledWith(0.25, 0.05);
+    expect(delayTime.value).toBe("8n.");
+
+    fxRack.setConfig({ delayTime: 0.5 });
+    expect(delayTime.rampTo).toHaveBeenCalledTimes(1);
+    expect(delayTime.value).toBe(0.5);
+
+    fxRack.setConfig({ delayTime: "4n" }, { smooth: true });
+    expect(delayTime.rampTo).toHaveBeenCalledTimes(1);
+    expect(delayTime.value).toBe("4n");
+  });
 });

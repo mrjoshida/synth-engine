@@ -1,6 +1,12 @@
+/**
+ * @file PolyVoice implementation with Tone.PolySynth.
+ */
+
 import * as Tone from "tone";
-import { BaseVoice } from "./Voice";
+import { BaseVoice, ApplyPatchOptions } from "./Voice";
 import { SynthPatch } from "../types";
+import { toToneOscillator, setToneParam } from "./helpers";
+import { getEffectiveParam } from "../params/patch";
 
 export class PolyVoice extends BaseVoice {
   private polySynth: Tone.PolySynth | null = null;
@@ -15,7 +21,7 @@ export class PolyVoice extends BaseVoice {
       frequency: 4500,
       type: "lowpass",
       rolloff: -24,
-      Q: 1.5
+      Q: 1.5,
     });
 
     this.polySynth = new Tone.PolySynth(Tone.Synth, {
@@ -24,8 +30,8 @@ export class PolyVoice extends BaseVoice {
         attack: 0.08,
         decay: 0.4,
         sustain: 0.3,
-        release: 1.4
-      }
+        release: 1.4,
+      },
     });
 
     this.polySynth.connect(this.filter);
@@ -34,7 +40,12 @@ export class PolyVoice extends BaseVoice {
     this.isInitialized = true;
   }
 
-  public triggerAttackRelease(note: string | string[], duration: string | number, time?: number, velocity: number = 0.8): void {
+  public triggerAttackRelease(
+    note: string | string[],
+    duration: string | number,
+    time?: number,
+    velocity: number = 0.8
+  ): void {
     if (!this.polySynth) return;
     try {
       this.polySynth.triggerAttackRelease(note, duration, time, velocity);
@@ -54,34 +65,52 @@ export class PolyVoice extends BaseVoice {
     if (hasNote) {
       this.polySynth.triggerRelease(note!, time);
     } else {
+      this.clearKeyMap();
       this.polySynth.releaseAll(time);
     }
   }
 
-  public applyPatch(patch: SynthPatch): void {
+  public applyPatch(patch: SynthPatch, opts?: ApplyPatchOptions): void {
     if (!this.polySynth || !this.filter) return;
+    const smooth = opts?.smooth ?? false;
 
-    if (patch.oscillator) {
-      (this.polySynth as any).set({
-        oscillator: { type: patch.oscillator.type }
-      });
+    // Oscillator configuration (unison stays raw)
+    const oscConfig = toToneOscillator({
+      type: getEffectiveParam(patch, "oscillator.type") as any,
+      count: patch.oscillator?.count,
+      spread: patch.oscillator?.spread,
+    });
+    (this.polySynth as any).set({
+      oscillator: oscConfig,
+    });
+
+    // Envelope
+    const attack = Number(getEffectiveParam(patch, "envelope.attack"));
+    const decay = Number(getEffectiveParam(patch, "envelope.decay"));
+    const sustain = Number(getEffectiveParam(patch, "envelope.sustain"));
+    const release = Number(getEffectiveParam(patch, "envelope.release"));
+
+    (this.polySynth as any).set({
+      envelope: { attack, decay, sustain, release },
+    });
+
+    // Filter
+    const freq = Number(getEffectiveParam(patch, "filter.frequency"));
+    const fType = String(getEffectiveParam(patch, "filter.type"));
+    const rolloff = Number(getEffectiveParam(patch, "filter.rolloff"));
+    const q = Number(getEffectiveParam(patch, "filter.Q"));
+
+    setToneParam(this.filter.frequency, freq, smooth);
+    if (this.filter.type !== fType) {
+      this.filter.type = fType as any;
     }
-
-    if (patch.envelope) {
-      (this.polySynth as any).set({
-        envelope: {
-          attack: patch.envelope.attack,
-          decay: patch.envelope.decay,
-          sustain: patch.envelope.sustain,
-          release: patch.envelope.release
-        }
-      });
+    if (rolloff !== undefined && !Number.isNaN(rolloff)) {
+      if (this.filter.rolloff !== rolloff) {
+        this.filter.rolloff = rolloff as any;
+      }
     }
-
-    if (patch.filter) {
-      this.filter.frequency.value = patch.filter.frequency;
-      this.filter.type = patch.filter.type;
-      if (patch.filter.Q) this.filter.Q.value = patch.filter.Q;
+    if (q !== undefined && !Number.isNaN(q)) {
+      setToneParam(this.filter.Q, q, smooth);
     }
   }
 
@@ -92,6 +121,7 @@ export class PolyVoice extends BaseVoice {
     this.polySynth = null;
     this.filter = null;
     this.outputNode = null;
+    this.clearKeyMap();
     this.isInitialized = false;
   }
 }

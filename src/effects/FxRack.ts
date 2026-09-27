@@ -1,5 +1,6 @@
 import * as Tone from "tone";
 import { FxConfig } from "../types";
+import { setToneParam } from "../voices/helpers";
 
 export class FxRack {
   private chorus: Tone.Chorus | null = null;
@@ -48,37 +49,42 @@ export class FxRack {
     return this.chorus || this.masterGain || Tone.getDestination();
   }
 
-  public setConfig(cfg: Partial<FxConfig>): void {
+  public setConfig(cfg: Partial<FxConfig>, opts?: { smooth?: boolean }): void {
+    const smooth = opts?.smooth ?? false;
     if (cfg.masterVolume !== undefined && this.masterGain) {
-      this.masterGain.gain.value = Math.max(0, Math.min(1.0, cfg.masterVolume));
+      setToneParam(this.masterGain.gain, Math.max(0, Math.min(1.0, cfg.masterVolume)), smooth);
     }
     if (cfg.reverbWet !== undefined && this.reverb) {
-      this.reverb.wet.value = Math.max(0, Math.min(1.0, cfg.reverbWet));
+      setToneParam(this.reverb.wet, Math.max(0, Math.min(1.0, cfg.reverbWet)), smooth);
     }
     if (cfg.reverbDecay !== undefined && this.reverb) {
       if ("roomSize" in this.reverb) {
-        (this.reverb as any).roomSize.value = Math.max(0.01, Math.min(1.0, cfg.reverbDecay / 5));
+        setToneParam((this.reverb as any).roomSize, Math.max(0.01, Math.min(1.0, cfg.reverbDecay / 5)), smooth);
       } else if ("decay" in this.reverb) {
         (this.reverb as any).decay = Math.max(0.1, cfg.reverbDecay);
       }
     }
     if (cfg.chorusWet !== undefined && this.chorus) {
-      this.chorus.wet.value = Math.max(0, Math.min(1.0, cfg.chorusWet));
+      setToneParam(this.chorus.wet, Math.max(0, Math.min(1.0, cfg.chorusWet)), smooth);
     }
     if (cfg.chorusFrequency !== undefined && this.chorus) {
-      this.chorus.frequency.value = cfg.chorusFrequency;
+      setToneParam(this.chorus.frequency, cfg.chorusFrequency, smooth);
     }
     if (cfg.chorusDepth !== undefined && this.chorus) {
       this.chorus.depth = cfg.chorusDepth;
     }
     if (cfg.delayWet !== undefined && this.delay) {
-      this.delay.wet.value = Math.max(0, Math.min(1.0, cfg.delayWet));
+      setToneParam(this.delay.wet, Math.max(0, Math.min(1.0, cfg.delayWet)), smooth);
     }
     if (cfg.delayFeedback !== undefined && this.delay) {
-      this.delay.feedback.value = Math.max(0, Math.min(0.95, cfg.delayFeedback));
+      setToneParam(this.delay.feedback, Math.max(0, Math.min(0.95, cfg.delayFeedback)), smooth);
     }
     if (cfg.delayTime !== undefined && this.delay) {
-      this.delay.delayTime.value = cfg.delayTime;
+      if (typeof cfg.delayTime === "number") {
+        setToneParam(this.delay.delayTime, cfg.delayTime, smooth);
+      } else {
+        this.delay.delayTime.value = cfg.delayTime;
+      }
     }
   }
 

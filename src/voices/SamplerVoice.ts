@@ -116,7 +116,27 @@ export class SamplerVoice extends BaseVoice {
     }
   }
 
-  public triggerRelease(note?: string | string[], time?: number): void {
+  public override stopNote(key: string, time?: number): void {
+    const note = this.keyToNoteMap.get(key);
+    if (note !== undefined) {
+      this.keyToNoteMap.delete(key);
+      let stillMapped = false;
+      for (const mappedNote of this.keyToNoteMap.values()) {
+        if (mappedNote === note) {
+          stillMapped = true;
+          break;
+        }
+      }
+      if (!stillMapped) {
+        this.triggerRelease(note, time);
+      }
+    }
+  }
+
+  public override triggerRelease(note?: string | string[], time?: number): void {
+    if (note === undefined) {
+      this.clearKeyMap();
+    }
     try {
       const hasNote = note !== undefined && (!Array.isArray(note) || note.length > 0);
       if (hasNote && this.sampler) {
@@ -147,6 +167,7 @@ export class SamplerVoice extends BaseVoice {
     }
     this.onLoadCallbacks = [];
     this.currentInstrumentId = null;
+    this.clearKeyMap();
     this.isInitialized = false;
   }
 }
