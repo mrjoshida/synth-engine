@@ -80,7 +80,11 @@ export class FxRack {
       setToneParam(this.delay.feedback, Math.max(0, Math.min(0.95, cfg.delayFeedback)), smooth);
     }
     if (cfg.delayTime !== undefined && this.delay) {
-      this.delay.delayTime.value = cfg.delayTime;
+      if (typeof cfg.delayTime === "number") {
+        setToneParam(this.delay.delayTime, cfg.delayTime, smooth);
+      } else {
+        this.delay.delayTime.value = cfg.delayTime;
+      }
     }
   }
 
