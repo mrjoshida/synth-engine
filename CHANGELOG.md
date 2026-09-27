@@ -5,6 +5,16 @@ All notable changes to `@mrjoshida/synth-engine` will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-09-27
+
+### Added
+- `SynthEngine.init({ lookAhead })`: sets the Tone.js scheduling look-ahead in seconds. Use `0` for live play; Tone's default (0.1 s) delays every note triggered "now".
+- `SynthEngine.init({ webMidi: false })`: skips the engine's own Web MIDI access request and its permission prompt, for host apps that manage Web MIDI themselves.
+- Exported `SynthEngineInitOptions` type.
+
+### Changed
+- `SynthEngine.init()` is safe to call concurrently: callers share one in-flight initialization instead of building duplicate voice chains. A failed initialization can be retried, and `dispose()` allows a fresh `init()`.
+
 ## [0.2.1] - 2026-09-25
 
 ### Fixed

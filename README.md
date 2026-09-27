@@ -53,7 +53,11 @@ sharedSynthEngine.playChord(["A3", "C4", "E4"], "1n", 0.8, "sampler");
 import { SynthEngine } from "@mrjoshida/synth-engine";
 
 const engine = new SynthEngine();
-await engine.init({ latencyHint: "interactive" });
+// From a user gesture. noteOn/noteOff are ignored until init() resolves.
+// lookAhead: 0 removes Tone's default 0.1 s scheduling delay for live play.
+// webMidi: false skips the engine's own MIDI access request (and permission prompt)
+// when your app manages Web MIDI itself. init() is safe to call more than once.
+await engine.init({ latencyHint: "interactive", lookAhead: 0 });
 
 // Audio Context unlock on user gesture
 await engine.unlock();

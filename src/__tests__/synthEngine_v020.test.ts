@@ -326,3 +326,95 @@ describe("SynthEngine v0.2.0 Additions (S1, S2, S3)", () => {
     });
   });
 });
+
+describe("SynthEngine v0.3.0 init options", () => {
+  beforeEach(() => {
+    activeContext.current = new MockContext();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("requests Web MIDI access by default", async () => {
+    const engine = new SynthEngine();
+    const midiInitSpy = vi.spyOn(engine.webMidi, "init");
+    await engine.init();
+    expect(midiInitSpy).toHaveBeenCalledTimes(1);
+    engine.dispose();
+  });
+
+  it("webMidi: false skips the engine's own Web MIDI access request", async () => {
+    const engine = new SynthEngine();
+    const midiInitSpy = vi.spyOn(engine.webMidi, "init");
+    await engine.init({ webMidi: false });
+    expect(midiInitSpy).not.toHaveBeenCalled();
+    engine.dispose();
+  });
+
+  it("lookAhead sets the Tone context look-ahead", async () => {
+    const engine = new SynthEngine();
+    (activeContext.current as any).lookAhead = 0.1;
+    await engine.init({ lookAhead: 0 });
+    expect((activeContext.current as any).lookAhead).toBe(0);
+    engine.dispose();
+  });
+
+  it("leaves the look-ahead unchanged when omitted or invalid", async () => {
+    for (const lookAhead of [undefined, -1, Number.NaN]) {
+      activeContext.current = new MockContext();
+      (activeContext.current as any).lookAhead = 0.1;
+      const engine = new SynthEngine();
+      await engine.init({ lookAhead });
+      expect((activeContext.current as any).lookAhead).toBe(0.1);
+      engine.dispose();
+    }
+  });
+
+  it("applies lookAhead to the context created for latencyHint", async () => {
+    activeContext.current.state = "suspended";
+    const engine = new SynthEngine();
+    await engine.init({ latencyHint: "interactive", lookAhead: 0 });
+    expect(activeContext.current.options).toEqual({ latencyHint: "interactive" });
+    expect((activeContext.current as any).lookAhead).toBe(0);
+    engine.dispose();
+  });
+
+  it("concurrent init calls share one initialization", async () => {
+    const engine = new SynthEngine();
+    const fxInitSpy = vi.spyOn(engine.fxRack, "init");
+    const polyInitSpy = vi.spyOn(engine.polyVoice, "init");
+    const first = engine.init();
+    const second = engine.init();
+    expect(second).toBe(first);
+    await Promise.all([first, second]);
+    expect(fxInitSpy).toHaveBeenCalledTimes(1);
+    expect(polyInitSpy).toHaveBeenCalledTimes(1);
+    engine.dispose();
+  });
+
+  it("ignores notes until init succeeds, and a failed init can be retried", async () => {
+    const engine = new SynthEngine();
+    vi.spyOn(engine.fxRack, "init").mockRejectedValueOnce(new Error("boom"));
+    const attackSpy = vi.spyOn(engine.polyVoice, "triggerAttack");
+
+    await expect(engine.init()).rejects.toThrow("boom");
+    engine.noteOn(60);
+    expect(attackSpy).not.toHaveBeenCalled();
+
+    await engine.init();
+    engine.noteOn(60);
+    expect(attackSpy).toHaveBeenCalledTimes(1);
+    engine.dispose();
+  });
+
+  it("can initialize again after dispose", async () => {
+    const engine = new SynthEngine();
+    await engine.init();
+    engine.dispose();
+    const polyInitSpy = vi.spyOn(engine.polyVoice, "init");
+    await engine.init();
+    expect(polyInitSpy).toHaveBeenCalledTimes(1);
+    engine.dispose();
+  });
+});
