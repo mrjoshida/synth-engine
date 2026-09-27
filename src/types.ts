@@ -1,5 +1,19 @@
 export type SynthEngineType = "poly" | "fm" | "pluck" | "moog" | "drone" | "membrane" | "sampler";
 
+/** Options for `SynthEngine.init()`. */
+export interface SynthEngineInitOptions {
+  /** AudioContext latency hint, applied only while audio is not yet running. */
+  latencyHint?: AudioContextLatencyCategory | number;
+  /**
+   * Tone.js scheduling look-ahead in seconds (Tone's default is 0.1). Use `0` for live play.
+   * Keep a look-ahead if you schedule sequences on the Transport: without one, main-thread jitter
+   * can make scheduled events late or uneven.
+   */
+  lookAhead?: number;
+  /** Pass `false` when the host app manages Web MIDI itself. Defaults to `true`. */
+  webMidi?: boolean;
+}
+
 export type OscillatorShape = "sine" | "triangle" | "sawtooth" | "square" | "fatsaw" | "fattriangle" | "pulse";
 
 export interface EnvelopeConfig {

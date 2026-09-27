@@ -18,10 +18,13 @@ import { FxRack } from "../effects/FxRack";
 import { WebMidiManager } from "../midi/WebMidiManager";
 import { MidiFileEncoder } from "../midi/MidiFileEncoder";
 import { PresetManager } from "../presets/PresetManager";
-import { SynthEngineType, MidiNoteEvent, SynthPatch, FxConfig } from "../types";
+import { SynthEngineType, SynthEngineInitOptions, MidiNoteEvent, SynthPatch, FxConfig } from "../types";
 
 export class SynthEngine {
   private initialized = false;
+  private initPromise: Promise<void> | null = null;
+  /** Bumped by dispose() so an initialization still in flight knows it was cancelled. */
+  private initGeneration = 0;
 
   // Voices
   public polyVoice = new PolyVoice();
@@ -46,9 +49,31 @@ export class SynthEngine {
   private attachedAudioContext: AudioContext | null = null;
   private audioContextHandler: (() => void) | null = null;
 
-  public async init(opts?: { latencyHint?: AudioContextLatencyCategory | number }): Promise<void> {
-    if (this.initialized) return;
+  /**
+   * Builds the audio graph (FX rack and voices). `noteOn`/`noteOff` are ignored until this
+   * resolves. Safe to call repeatedly or concurrently: callers share one initialization, and
+   * a failed initialization can be retried. Call it from a user gesture so audio can start.
+   *
+   * @param opts.latencyHint AudioContext latency hint, applied only while audio is not yet running.
+   * @param opts.lookAhead Tone.js scheduling look-ahead in seconds. Use `0` for live play: notes are
+   *   triggered "now", and Tone's default look-ahead (0.1 s) would delay every note by that much.
+   *   Keep a look-ahead if you schedule sequences on the Transport.
+   * @param opts.webMidi Pass `false` when the host app manages Web MIDI itself. Skips the engine's
+   *   own MIDI access request and its permission prompt. Defaults to `true`.
+   */
+  public init(opts?: SynthEngineInitOptions): Promise<void> {
+    if (this.initialized) return Promise.resolve();
+    if (!this.initPromise) {
+      this.initPromise = this.initAudioGraph(opts).catch((err: unknown) => {
+        this.initPromise = null;
+        throw err;
+      });
+    }
+    return this.initPromise;
+  }
 
+  private async initAudioGraph(opts?: SynthEngineInitOptions): Promise<void> {
+    const generation = this.initGeneration;
     if (opts?.latencyHint !== undefined && ("getContext" in Tone) && ("setContext" in Tone) && typeof (Tone as any).getContext === "function" && typeof (Tone as any).setContext === "function") {
       const currentContext = (Tone as any).getContext();
       if (currentContext && currentContext.state !== "running") {
@@ -56,37 +81,49 @@ export class SynthEngine {
       }
     }
 
+    const lookAhead = opts?.lookAhead;
+    if (typeof lookAhead === "number" && Number.isFinite(lookAhead) && lookAhead >= 0 && ("getContext" in Tone) && typeof (Tone as any).getContext === "function") {
+      const context = (Tone as any).getContext();
+      if (context) {
+        context.lookAhead = lookAhead;
+      }
+    }
+
     this.ensureAudioContextListener();
+
+    // dispose() bumps initGeneration. Stop at the first await it interrupts, so a cancelled
+    // initialization never touches the graph again (a newer init() may already be wiring it).
+    const cancelled = () => generation !== this.initGeneration;
 
     if (typeof (Tone as any).start === "function") {
       await Tone.start();
+      if (cancelled()) return;
     }
     await this.fxRack.init();
+    if (cancelled()) return;
 
     const fxInput = this.fxRack.getInput();
+    const voices = [
+      this.polyVoice,
+      this.fmVoice,
+      this.pluckVoice,
+      this.moogVoice,
+      this.droneVoice,
+      this.membraneVoice,
+      this.samplerVoice,
+    ];
+    for (const voice of voices) {
+      await voice.init();
+      if (cancelled()) return;
+      // Disconnect first: a retried init must not add a second route (Web Audio does not dedupe).
+      voice.disconnect();
+      voice.connect(fxInput);
+    }
 
-    await this.polyVoice.init();
-    this.polyVoice.connect(fxInput);
-
-    await this.fmVoice.init();
-    this.fmVoice.connect(fxInput);
-
-    await this.pluckVoice.init();
-    this.pluckVoice.connect(fxInput);
-
-    await this.moogVoice.init();
-    this.moogVoice.connect(fxInput);
-
-    await this.droneVoice.init();
-    this.droneVoice.connect(fxInput);
-
-    await this.membraneVoice.init();
-    this.membraneVoice.connect(fxInput);
-
-    await this.samplerVoice.init();
-    this.samplerVoice.connect(fxInput);
-
-    await this.webMidi.init();
+    if (opts?.webMidi !== false) {
+      await this.webMidi.init();
+      if (cancelled()) return;
+    }
 
     this.sessionStartTime = Tone.now();
     this.initialized = true;
@@ -469,6 +506,8 @@ export class SynthEngine {
     this.samplerVoice.dispose();
     this.fxRack.dispose();
     this.initialized = false;
+    this.initPromise = null;
+    this.initGeneration++;
   }
 }
 

@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 vi.mock("tone", () => {
   class MockNode {
     connect() { return this; }
+    disconnect() { return this; }
     toDestination() { return this; }
     dispose() {}
     start() { return this; }
