@@ -48,6 +48,10 @@ export abstract class PooledVoice<
     this.busGain = new Tone.Gain(1.0);
     this.busGain.connect(destination);
 
+    for (const s of this.synths) {
+      s.connect(this.busGain);
+    }
+
     // Pre-warm ONE synth
     this.getOrCreateSynth(0);
 
@@ -129,9 +133,20 @@ export abstract class PooledVoice<
     time?: number,
     velocity: number = 0.8
   ): void {
+    let durSec: number;
+    try {
+      durSec = typeof duration === "number" ? duration : Tone.Time(duration).toSeconds();
+      if (!Number.isFinite(durSec) || durSec < 0) {
+        console.warn(`${this.engine} triggerAttackRelease invalid duration:`, duration);
+        return;
+      }
+    } catch (e) {
+      console.warn(`${this.engine} triggerAttackRelease invalid duration:`, duration, e);
+      return;
+    }
+
     const notes = Array.isArray(note) ? note : [note];
     const now = time ?? Tone.now();
-    const durSec = typeof duration === "number" ? duration : Tone.Time(duration).toSeconds();
 
     for (const n of notes) {
       const key = `tar:${++this.tarCounter}`;

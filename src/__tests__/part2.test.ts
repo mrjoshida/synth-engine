@@ -136,6 +136,8 @@ import { SynthEngine } from "../engine/SynthEngine";
 import { toToneOscillator } from "../voices/helpers";
 import { SynthPatch } from "../types";
 import { VoiceAllocator } from "../voices/VoiceAllocator";
+import { PluckVoice } from "../voices/PluckVoice";
+import * as Tone from "tone";
 
 describe("Part 2: Polyphony, Voice Pooling & Engine Enhancements", () => {
   let engine: SynthEngine;
@@ -641,6 +643,81 @@ describe("Part 2: Polyphony, Voice Pooling & Engine Enhancements", () => {
     expect((engine as any).activeNotes.size).toBe(1);
 
     warnSpy.mockRestore();
+  });
+
+  it("PooledVoice.init connects synths created prior to init to busGain", async () => {
+    const pluck = new PluckVoice();
+    const synth0 = (pluck as any).getOrCreateSynth(0);
+    const connectSpy = vi.spyOn(synth0, "connect");
+
+    await pluck.init();
+
+    const busGain = (pluck as any).busGain;
+    expect(connectSpy).toHaveBeenCalledWith(busGain);
+    pluck.dispose();
+  });
+
+  it("PooledVoice.triggerAttackRelease guards against invalid duration, warns and returns early without allocating", () => {
+    const pluck = engine.pluckVoice;
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const synth = (pluck as any).synths[0];
+    const tarSpy = vi.spyOn(synth, "triggerAttackRelease");
+    const taSpy = vi.spyOn(synth, "triggerAttack");
+
+    const heldBefore = (pluck as any).allocator.heldKeys();
+    const sizeBefore = (pluck as any).allocator.size;
+
+    const timeSpy = vi.spyOn(Tone, "Time").mockImplementationOnce(() => {
+      throw new Error("Invalid time format");
+    });
+    pluck.triggerAttackRelease("C4", "bad-time");
+    expect(warnSpy).toHaveBeenCalled();
+    timeSpy.mockRestore();
+
+    pluck.triggerAttackRelease("C4", NaN);
+    expect(warnSpy).toHaveBeenCalled();
+
+    pluck.triggerAttackRelease("C4", -0.5);
+    expect(warnSpy).toHaveBeenCalled();
+
+    expect(tarSpy).not.toHaveBeenCalled();
+    expect(taSpy).not.toHaveBeenCalled();
+    expect((pluck as any).allocator.heldKeys()).toEqual(heldBefore);
+    expect((pluck as any).allocator.size).toBe(sizeBefore);
+
+    warnSpy.mockRestore();
+  });
+
+  it("PolyVoice: two keys on the same pitch produce two triggerAttack and two triggerRelease calls on PolySynth", () => {
+    const poly = engine.polyVoice;
+    const polySynth = (poly as any).polySynth;
+    const attackSpy = vi.spyOn(polySynth, "triggerAttack");
+    const releaseSpy = vi.spyOn(polySynth, "triggerRelease");
+
+    poly.startNote("1:60", "C4");
+    poly.startNote("2:60", "C4");
+    expect(attackSpy).toHaveBeenCalledTimes(2);
+
+    poly.stopNote("1:60");
+    expect(releaseSpy).toHaveBeenCalledTimes(1);
+
+    poly.stopNote("2:60");
+    expect(releaseSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("SamplerVoice: overlapping keys on the same pitch call triggerRelease only when last key is released", () => {
+    const sampler = engine.samplerVoice;
+    const releaseSpy = vi.spyOn(sampler, "triggerRelease");
+
+    sampler.startNote("1:60", "C4");
+    sampler.startNote("2:60", "C4");
+
+    sampler.stopNote("1:60");
+    expect(releaseSpy).not.toHaveBeenCalled();
+
+    sampler.stopNote("2:60");
+    expect(releaseSpy).toHaveBeenCalledTimes(1);
+    expect(releaseSpy).toHaveBeenCalledWith("C4", undefined);
   });
 
 });
