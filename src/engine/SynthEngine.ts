@@ -278,11 +278,19 @@ export class SynthEngine {
     let midiNum: number;
 
     if (typeof note === "number") {
-      midiNum = Math.max(0, Math.min(127, Math.round(note)));
-      pitch = midiNumberToPitch(midiNum);
-    } else {
+      midiNum = Number.isFinite(note) ? Math.max(0, Math.min(127, Math.round(note))) : NaN;
+      pitch = Number.isFinite(midiNum) ? midiNumberToPitch(midiNum) : "";
+    } else if (typeof note === "string" && /^[A-Ga-g](?:#{1,2}|b{1,2})?-?\d+$/.test(note.trim())) {
       pitch = note;
       midiNum = pitchToMidiNumber(note);
+    } else {
+      pitch = "";
+      midiNum = NaN;
+    }
+
+    if (!Number.isFinite(midiNum)) {
+      console.warn(`Invalid note or pitch: ${note}`);
+      return;
     }
 
     const noteKey = `${channel}:${midiNum}`;
@@ -318,11 +326,19 @@ export class SynthEngine {
     let midiNum: number;
 
     if (typeof note === "number") {
-      midiNum = Math.max(0, Math.min(127, Math.round(note)));
-      pitch = midiNumberToPitch(midiNum);
-    } else {
+      midiNum = Number.isFinite(note) ? Math.max(0, Math.min(127, Math.round(note))) : NaN;
+      pitch = Number.isFinite(midiNum) ? midiNumberToPitch(midiNum) : "";
+    } else if (typeof note === "string" && /^[A-Ga-g](?:#{1,2}|b{1,2})?-?\d+$/.test(note.trim())) {
       pitch = note;
       midiNum = pitchToMidiNumber(note);
+    } else {
+      pitch = "";
+      midiNum = NaN;
+    }
+
+    if (!Number.isFinite(midiNum)) {
+      console.warn(`Invalid note or pitch: ${note}`);
+      return;
     }
 
     const noteKey = `${channel}:${midiNum}`;
@@ -514,6 +530,9 @@ export class SynthEngine {
       this.fxRack.setConfig({ [fxKey]: clampedVal } as any, { smooth: true });
     } else {
       this.getVoice(next.engineType).applyPatch(next, { smooth: true });
+      if (path.startsWith("samplerConfig") && next.samplerConfig) {
+        void this.loadInstrument(next.samplerConfig.instrumentId).catch((e) => console.warn(e));
+      }
     }
 
     this.currentPatch = next;

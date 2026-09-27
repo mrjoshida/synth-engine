@@ -135,6 +135,7 @@ vi.mock("tone", () => {
 import { SynthEngine } from "../engine/SynthEngine";
 import { toToneOscillator } from "../voices/helpers";
 import { SynthPatch } from "../types";
+import { VoiceAllocator } from "../voices/VoiceAllocator";
 
 describe("Part 2: Polyphony, Voice Pooling & Engine Enhancements", () => {
   let engine: SynthEngine;
@@ -540,6 +541,106 @@ describe("Part 2: Polyphony, Voice Pooling & Engine Enhancements", () => {
     engine.releaseAll();
     expect(drone.toggle("C2")).toBe(true);
     drone.toggle("C2");
+  });
+
+  it("setParam with samplerConfig.instrumentId loads instrument samples and updates patch", async () => {
+    const loadSpy = vi.spyOn(engine, "loadInstrument").mockResolvedValue(undefined);
+    expect(engine.setParam("samplerConfig.instrumentId", "electric-piano")).toBe(true);
+    expect(engine.getPatch().samplerConfig?.instrumentId).toBe("electric-piano");
+    expect(loadSpy).toHaveBeenCalledWith("electric-piano");
+
+    const patchBefore = engine.getPatch();
+    expect(engine.setParam("samplerConfig.nonexistentProperty", "val")).toBe(false);
+    expect(engine.setParam("samplerConfig.instrumentId", "invalid-instrument-id")).toBe(false);
+    expect(engine.getPatch()).toEqual(patchBefore);
+    loadSpy.mockRestore();
+  });
+
+  it("VoiceAllocator: slot released with NaN releaseSeconds can be reused or stolen without becoming stranded", () => {
+    const allocator = new VoiceAllocator(1);
+    const alloc1 = allocator.noteOn("k1", 10);
+    expect(alloc1.index).toBe(0);
+
+    const released = allocator.noteOff("k1", 10, NaN);
+    expect(released).toBe(0);
+
+    const alloc2 = allocator.noteOn("k2", 10);
+    expect(alloc2.index).toBe(0);
+    expect(alloc2.retrigger).toBe(false);
+
+    allocator.releaseAll(20, NaN);
+    const alloc3 = allocator.noteOn("k3", 20);
+    expect(alloc3.index).toBe(0);
+    expect(alloc3.retrigger).toBe(false);
+  });
+
+  it("PooledVoice: duplicate stopNote does not re-trigger release, and releaseAll followed by stopNote does not re-release", () => {
+    const pluck = engine.pluckVoice;
+    const synth = (pluck as any).synths[0];
+    const triggerReleaseSpy = vi.spyOn(synth, "triggerRelease");
+
+    pluck.startNote("note:C4", "C4");
+    expect(triggerReleaseSpy).not.toHaveBeenCalled();
+
+    pluck.stopNote("note:C4");
+    expect(triggerReleaseSpy).toHaveBeenCalledTimes(1);
+
+    pluck.stopNote("note:C4");
+    expect(triggerReleaseSpy).toHaveBeenCalledTimes(1);
+
+    pluck.startNote("note:D4", "D4");
+    triggerReleaseSpy.mockClear();
+
+    pluck.triggerRelease();
+    expect(triggerReleaseSpy).toHaveBeenCalledTimes(1);
+
+    pluck.stopNote("note:D4");
+    expect(triggerReleaseSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("SynthEngine.noteOn guards against non-finite pitch strings and numbers, warns and returns early", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const polyStartSpy = vi.spyOn(engine.polyVoice, "startNote");
+    const midiSendSpy = vi.spyOn(engine.webMidi, "sendNoteOn");
+
+    engine.noteOn("H4");
+    expect(warnSpy).toHaveBeenCalledWith("Invalid note or pitch: H4");
+
+    engine.noteOn("");
+    expect(warnSpy).toHaveBeenCalledWith("Invalid note or pitch: ");
+
+    engine.noteOn(NaN);
+    expect(warnSpy).toHaveBeenCalledWith("Invalid note or pitch: NaN");
+
+    expect(polyStartSpy).not.toHaveBeenCalled();
+    expect(midiSendSpy).not.toHaveBeenCalled();
+    expect((engine as any).activeNotes.size).toBe(0);
+
+    warnSpy.mockRestore();
+  });
+
+  it("SynthEngine.noteOff guards against non-finite pitch strings and numbers, warns and returns early", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const polyStopSpy = vi.spyOn(engine.polyVoice, "stopNote");
+    const midiStopSpy = vi.spyOn(engine.webMidi, "sendNoteOff");
+
+    engine.noteOn("C4");
+    expect((engine as any).activeNotes.size).toBe(1);
+
+    engine.noteOff("H4");
+    expect(warnSpy).toHaveBeenCalledWith("Invalid note or pitch: H4");
+
+    engine.noteOff("");
+    expect(warnSpy).toHaveBeenCalledWith("Invalid note or pitch: ");
+
+    engine.noteOff(NaN);
+    expect(warnSpy).toHaveBeenCalledWith("Invalid note or pitch: NaN");
+
+    expect(polyStopSpy).not.toHaveBeenCalled();
+    expect(midiStopSpy).not.toHaveBeenCalled();
+    expect((engine as any).activeNotes.size).toBe(1);
+
+    warnSpy.mockRestore();
   });
 
 });

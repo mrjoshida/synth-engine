@@ -152,11 +152,12 @@ export class VoiceAllocator {
    * @param releaseSeconds Envelope release duration in seconds.
    */
   noteOff(key: string, now: number, releaseSeconds: number): number {
+    const safeRelease = Number.isFinite(releaseSeconds) ? Math.max(0, releaseSeconds) : 0;
     for (let i = 0; i < this.slots.length; i++) {
       const slot = this.slots[i];
       if (slot.key === key && slot.held) {
         slot.held = false;
-        slot.freeAt = now + Math.max(0, releaseSeconds);
+        slot.freeAt = now + safeRelease;
         return i;
       }
     }
@@ -171,7 +172,8 @@ export class VoiceAllocator {
    */
   releaseAll(now: number, releaseSeconds: number): number[] {
     const releasedIndices: number[] = [];
-    const freeAt = now + Math.max(0, releaseSeconds);
+    const safeRelease = Number.isFinite(releaseSeconds) ? Math.max(0, releaseSeconds) : 0;
+    const freeAt = now + safeRelease;
     for (let i = 0; i < this.slots.length; i++) {
       const slot = this.slots[i];
       if (slot.held) {

@@ -19,7 +19,8 @@ export class PluckVoice extends PooledVoice<Tone.PluckSynth> {
   }
 
   protected releaseSeconds(synth: Tone.PluckSynth): number {
-    return (synth as any).release ?? 1;
+    const rel = Number(synth.release);
+    return Number.isFinite(rel) ? rel : 1;
   }
 
   protected applySynth(synth: Tone.PluckSynth, patch: SynthPatch, _smooth?: boolean): void {

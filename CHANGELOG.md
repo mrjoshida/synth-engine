@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sampler built-in presets (`sampler-grand-piano`, `sampler-electric-piano`, `sampler-celesta`) envelope attack/decay updated from 0 to 0.001 to conform to the 0.001 min log scale parameter range (SamplerVoice ignores envelope so audible playback is unchanged).
 
 ### Fixed
+- Guarded `SynthEngine.noteOn` and `noteOff` against non-finite resolved MIDI pitches, logging a warning and returning early.
 - Presets using "fatsaw" (`poly-neon-sunrise`, `poly-microtonal-haze`) threw a Tone TypeError on load.
 - Unison count/spread, filter rolloff and Q = 0 were ignored.
 - Presets now sound the same whatever was loaded before: voices reset absent fields to engine defaults.

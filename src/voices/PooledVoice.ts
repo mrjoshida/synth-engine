@@ -84,13 +84,15 @@ export abstract class PooledVoice<
     const idx = this.allocator.indexOf(key);
     if (idx !== -1 && idx < this.synths.length) {
       const synth = this.synths[idx];
-      try {
-        synth.triggerRelease?.(time);
-      } catch (e) {
-        console.error(`${this.engine} stopNote synth triggerRelease error:`, e);
-      }
       const relSec = this.releaseSeconds(synth);
-      this.allocator.noteOff(key, now, relSec);
+      const releasedIdx = this.allocator.noteOff(key, now, relSec);
+      if (releasedIdx !== -1) {
+        try {
+          synth.triggerRelease?.(time);
+        } catch (e) {
+          console.error(`${this.engine} stopNote synth triggerRelease error:`, e);
+        }
+      }
     }
   }
 
