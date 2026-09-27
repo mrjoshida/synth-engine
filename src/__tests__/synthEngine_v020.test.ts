@@ -258,13 +258,49 @@ describe("SynthEngine v0.2.0 Additions (S1, S2, S3)", () => {
     });
 
     it("panic immediately silences all voices with Tone.now() and sends allNotesOff", () => {
-      const releaseAllSpy = vi.spyOn(engine, "releaseAll");
+      const polyHardStop = vi.spyOn(engine.polyVoice, "hardStop");
+      const fmHardStop = vi.spyOn(engine.fmVoice, "hardStop");
+      const pluckHardStop = vi.spyOn(engine.pluckVoice, "hardStop");
+      const moogHardStop = vi.spyOn(engine.moogVoice, "hardStop");
+      const droneHardStop = vi.spyOn(engine.droneVoice, "hardStop");
+      const membraneHardStop = vi.spyOn(engine.membraneVoice, "hardStop");
+      const samplerHardStop = vi.spyOn(engine.samplerVoice, "hardStop");
+
+      const polyRelease = vi.spyOn(engine.polyVoice, "triggerRelease");
+      const fmRelease = vi.spyOn(engine.fmVoice, "triggerRelease");
+      const pluckRelease = vi.spyOn(engine.pluckVoice, "triggerRelease");
+      const moogRelease = vi.spyOn(engine.moogVoice, "triggerRelease");
+      const droneRelease = vi.spyOn(engine.droneVoice, "triggerRelease");
+      const membraneRelease = vi.spyOn(engine.membraneVoice, "triggerRelease");
+      const samplerRelease = vi.spyOn(engine.samplerVoice, "triggerRelease");
+
       const midiPanicSpy = vi.spyOn(engine.webMidi, "allNotesOff");
 
       engine.panic();
 
-      expect(releaseAllSpy).toHaveBeenCalledTimes(1);
-      expect(releaseAllSpy).toHaveBeenCalledWith(100);
+      expect(polyHardStop).toHaveBeenCalledTimes(1);
+      expect(polyHardStop).toHaveBeenCalledWith(100);
+      expect(fmHardStop).toHaveBeenCalledTimes(1);
+      expect(fmHardStop).toHaveBeenCalledWith(100);
+      expect(pluckHardStop).toHaveBeenCalledTimes(1);
+      expect(pluckHardStop).toHaveBeenCalledWith(100);
+      expect(moogHardStop).toHaveBeenCalledTimes(1);
+      expect(moogHardStop).toHaveBeenCalledWith(100);
+      expect(droneHardStop).toHaveBeenCalledTimes(1);
+      expect(droneHardStop).toHaveBeenCalledWith(100);
+      expect(membraneHardStop).toHaveBeenCalledTimes(1);
+      expect(membraneHardStop).toHaveBeenCalledWith(100);
+      expect(samplerHardStop).toHaveBeenCalledTimes(1);
+      expect(samplerHardStop).toHaveBeenCalledWith(100);
+
+      expect(polyRelease).not.toHaveBeenCalled();
+      expect(fmRelease).not.toHaveBeenCalled();
+      expect(pluckRelease).not.toHaveBeenCalled();
+      expect(moogRelease).not.toHaveBeenCalled();
+      expect(droneRelease).not.toHaveBeenCalled();
+      expect(membraneRelease).not.toHaveBeenCalled();
+      expect(samplerRelease).not.toHaveBeenCalled();
+
       expect(midiPanicSpy).toHaveBeenCalledTimes(1);
     });
   });

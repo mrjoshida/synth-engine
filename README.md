@@ -70,8 +70,11 @@ engine.noteOn("G4", 0.7);
 engine.noteOff(60);
 engine.noteOff("G4");
 
-// Emergency stop: silences all 7 engine voices and sends MIDI All Notes Off
+// Emergency stop: hard-mutes all voices and FX tails within ~10 ms, restoring playability after ~120 ms
 engine.panic();
+
+// Natural release: triggers normal envelope release across all voices, preserving reverb/delay tails
+engine.releaseAll();
 ```
 
 ## Audio Lifecycle Management

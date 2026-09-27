@@ -43,6 +43,14 @@ export class MoogVoice extends PooledVoice<Tone.MonoSynth> {
     return Math.max(envRel, 0.8);
   }
 
+  protected overrideRelease(synth: Tone.MonoSynth, seconds: number): () => void {
+    const prev = synth.envelope.release;
+    synth.envelope.release = seconds;
+    return () => {
+      synth.envelope.release = prev;
+    };
+  }
+
   protected applySynth(synth: Tone.MonoSynth, patch: SynthPatch, smooth?: boolean): void {
     const oscConfig = toToneOscillator({
       type: getEffectiveParam(patch, "oscillator.type") as any,

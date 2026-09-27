@@ -5,6 +5,15 @@ All notable changes to `@mrjoshida/synth-engine` will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-09-27
+
+### Added
+- `BaseVoice.hardStop(time?: number)` and `FxRack.hardMute(time: number, holdSeconds?: number)` for immediate (~10 ms) audio silencing and FX tail cutoff.
+- `SamplerVoice.hardStop` shortens the fade-out of already-sounding samples to 10 ms by adjusting `Tone.Sampler`'s internal active sources (a private Tone.js field); if that field is unavailable it falls back to a normal `releaseAll`.
+
+### Changed
+- `SynthEngine.panic()` now performs a click-free hard mute (10 ms voice release, reverb and delay tails flushed, playable again after ~120 ms) instead of a natural release, and still sends MIDI All Notes Off. Calling it again during the mute window keeps the original volume and FX settings. `releaseAll()` keeps the natural envelope release.
+
 ## [0.4.0] - 2026-09-27
 
 ### Added

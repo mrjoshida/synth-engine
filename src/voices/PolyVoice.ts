@@ -3,7 +3,7 @@
  */
 
 import * as Tone from "tone";
-import { BaseVoice, ApplyPatchOptions } from "./Voice";
+import { BaseVoice, ApplyPatchOptions, HARD_STOP_RELEASE_S } from "./Voice";
 import { SynthPatch } from "../types";
 import { toToneOscillator, setToneParam } from "./helpers";
 import { getEffectiveParam } from "../params/patch";
@@ -11,6 +11,7 @@ import { getEffectiveParam } from "../params/patch";
 export class PolyVoice extends BaseVoice {
   private polySynth: Tone.PolySynth | null = null;
   private filter: Tone.Filter | null = null;
+  private lastRelease = 1.4;
 
   public async init(): Promise<void> {
     if (this.isInitialized) return;
@@ -70,6 +71,20 @@ export class PolyVoice extends BaseVoice {
     }
   }
 
+  public override hardStop(time?: number): void {
+    this.clearKeyMap();
+    if (!this.polySynth) return;
+    const current =
+      (this.polySynth as any).get?.()?.envelope?.release ??
+      this.lastRelease;
+    try {
+      (this.polySynth as any).set({ envelope: { release: HARD_STOP_RELEASE_S } });
+      this.polySynth.releaseAll(time);
+    } finally {
+      (this.polySynth as any).set({ envelope: { release: current } });
+    }
+  }
+
   public applyPatch(patch: SynthPatch, opts?: ApplyPatchOptions): void {
     if (!this.polySynth || !this.filter) return;
     const smooth = opts?.smooth ?? false;
@@ -89,6 +104,7 @@ export class PolyVoice extends BaseVoice {
     const decay = Number(getEffectiveParam(patch, "envelope.decay"));
     const sustain = Number(getEffectiveParam(patch, "envelope.sustain"));
     const release = Number(getEffectiveParam(patch, "envelope.release"));
+    this.lastRelease = release;
 
     (this.polySynth as any).set({
       envelope: { attack, decay, sustain, release },

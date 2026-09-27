@@ -5,6 +5,12 @@
 import * as Tone from "tone";
 import { SynthPatch } from "../types";
 
+/**
+ * Envelope release duration (in seconds) used during emergency hard stops.
+ * Short enough to silence voices within ~10 ms without generating audible DC offset clicks.
+ */
+export const HARD_STOP_RELEASE_S = 0.01;
+
 export interface ApplyPatchOptions {
   /** If true, parameter transitions use rampTo(v, 0.05). */
   smooth?: boolean;
@@ -83,5 +89,15 @@ export abstract class BaseVoice {
    */
   public clearKeyMap(): void {
     this.keyToNoteMap.clear();
+  }
+
+  /**
+   * Hard stop: immediately silences active notes and clears the key map.
+   * Default implementation releases everything and clears the key map.
+   * Overrides shorten release to 0.01s before releasing and restoring.
+   */
+  public hardStop(time?: number): void {
+    this.triggerRelease(undefined, time);
+    this.clearKeyMap();
   }
 }

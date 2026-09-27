@@ -23,6 +23,14 @@ export class PluckVoice extends PooledVoice<Tone.PluckSynth> {
     return Number.isFinite(rel) ? rel : 1;
   }
 
+  protected overrideRelease(synth: Tone.PluckSynth, seconds: number): () => void {
+    const prev = synth.release;
+    synth.release = seconds;
+    return () => {
+      synth.release = prev;
+    };
+  }
+
   protected applySynth(synth: Tone.PluckSynth, patch: SynthPatch, _smooth?: boolean): void {
     synth.dampening = Number(getEffectiveParam(patch, "pluckParams.dampening"));
     synth.resonance = Number(getEffectiveParam(patch, "pluckParams.resonance"));
