@@ -18,15 +18,11 @@ export interface ToneOscillatorOptions {
  * - "pulse" is never fat
  * @param osc Patch oscillator configuration.
  */
-export function toToneOscillator(osc?: {
+export function toToneOscillator(osc: {
   type: OscillatorShape;
   count?: number;
   spread?: number;
 }): ToneOscillatorOptions {
-  if (!osc) {
-    return { type: "sawtooth" };
-  }
-
   const rawType = osc.type;
   const count = osc.count;
   const spread = osc.spread ?? 20;

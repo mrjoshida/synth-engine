@@ -35,7 +35,11 @@ export class DroneVoice extends PooledVoice<Tone.Synth> {
   }
 
   protected applySynth(synth: Tone.Synth, patch: SynthPatch, _smooth?: boolean): void {
-    const oscConfig = toToneOscillator(patch.oscillator);
+    const oscConfig = toToneOscillator({
+      type: getEffectiveParam(patch, "oscillator.type") as any,
+      count: patch.oscillator?.count,
+      spread: patch.oscillator?.spread,
+    });
     (synth as any).set({ oscillator: oscConfig });
 
     const attack = Number(getEffectiveParam(patch, "envelope.attack"));
@@ -44,6 +48,13 @@ export class DroneVoice extends PooledVoice<Tone.Synth> {
     const release = Number(getEffectiveParam(patch, "envelope.release"));
 
     (synth as any).set({ envelope: { attack, decay, sustain, release } });
+  }
+
+  public override triggerRelease(note?: string | string[], time?: number): void {
+    super.triggerRelease(note, time);
+    if (note === undefined) {
+      this.isToggled = false;
+    }
   }
 
   public toggle(note: string = "C2"): boolean {

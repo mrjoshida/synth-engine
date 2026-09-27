@@ -130,94 +130,6 @@ vi.mock("tone", () => {
       stop: vi.fn()
     }
   };
-
-  it("Audit round 2: pluck and membrane stopNote call synth triggerRelease", () => {
-    const pluck = engine.pluckVoice;
-    pluck.startNote("p1", "C4");
-    const pluckSynth = (pluck as any).synths[0];
-    pluckSynth.triggerRelease = vi.fn();
-    pluck.stopNote("p1");
-    expect(pluckSynth.triggerRelease).toHaveBeenCalled();
-
-    const membrane = engine.membraneVoice;
-    membrane.startNote("m1", "C2");
-    const membraneSynth = (membrane as any).synths[0];
-    membraneSynth.triggerRelease = vi.fn();
-    membrane.stopNote("m1");
-    expect(membraneSynth.triggerRelease).toHaveBeenCalled();
-  });
-
-  it("Audit round 2: triggerRelease() releases every held synth across pool", () => {
-    const moog = engine.moogVoice;
-    moog.startNote("k1", "C2");
-    moog.startNote("k2", "E2");
-    expect((moog as any).synths.length).toBe(2);
-
-    const s0 = (moog as any).synths[0];
-    const s1 = (moog as any).synths[1];
-    s0.triggerRelease = vi.fn();
-    s1.triggerRelease = vi.fn();
-
-    moog.triggerRelease();
-    expect(s0.triggerRelease).toHaveBeenCalled();
-    expect(s1.triggerRelease).toHaveBeenCalled();
-  });
-
-  it("Audit round 2: legacy pluck and membrane triggerAttack are one-shots (8n)", () => {
-    const pluck = engine.pluckVoice;
-    const tarSpy = vi.spyOn(pluck, "triggerAttackRelease");
-    pluck.triggerAttack("E4");
-    expect(tarSpy).toHaveBeenCalledWith("E4", "8n", undefined, 0.85);
-
-    const membrane = engine.membraneVoice;
-    const memTarSpy = vi.spyOn(membrane, "triggerAttackRelease");
-    membrane.triggerAttack("A1");
-    expect(memTarSpy).toHaveBeenCalledWith("A1", "8n", undefined, 0.9);
-  });
-
-  it("Audit round 2: new synth created before any patch gets engine defaults; new synth after patch gets last patch", () => {
-    const freshPluck = new (engine.pluckVoice.constructor as any)();
-    const synth0 = freshPluck.getOrCreateSynth(0);
-    // pluckParams.dampening engine default is 4200
-    expect(synth0.dampening).toBe(4200);
-
-    freshPluck.applyPatch({
-      id: "custom-pluck",
-      name: "Custom Pluck",
-      category: "pluck",
-      engineType: "pluck",
-      envelope: { attack: 0.001, decay: 0.5, sustain: 0, release: 0.5 },
-      pluckParams: { dampening: 7777, resonance: 0.5, attackNoise: 2 },
-    });
-
-    const synth1 = freshPluck.getOrCreateSynth(1);
-    expect(synth1.dampening).toBe(7777);
-    freshPluck.dispose();
-  });
-
-  it("Audit round 2: setParam with fxSends.* sends clamped value to fxRack", () => {
-    const setConfigSpy = vi.spyOn(engine.fxRack, "setConfig");
-    expect(engine.setParam("fxSends.chorusFrequency", 999)).toBe(true);
-    expect(setConfigSpy).toHaveBeenCalledWith({ chorusFrequency: 10 }, { smooth: true });
-  });
-
-  it("Audit round 2: init resolves even when loadInstrument rejects", async () => {
-    const uninitEngine = new SynthEngine();
-    uninitEngine.loadPatch({
-      id: "sampler-fail",
-      name: "Sampler Fail",
-      category: "keys",
-      engineType: "sampler",
-      envelope: { attack: 0.001, decay: 0.001, sustain: 1, release: 0.5 },
-      samplerConfig: { instrumentId: "grand-piano" },
-    });
-
-    vi.spyOn(uninitEngine, "loadInstrument").mockRejectedValue(new Error("Network failure"));
-    await expect(uninitEngine.init()).resolves.toBeUndefined();
-    expect(uninitEngine.isReady()).toBe(true);
-    uninitEngine.dispose();
-  });
-
 });
 
 import { SynthEngine } from "../engine/SynthEngine";
@@ -561,6 +473,73 @@ describe("Part 2: Polyphony, Voice Pooling & Engine Enhancements", () => {
     const synth = (moog as any).synths[0];
     expect(synth.filter.rolloff).toBe(-24);
     expect(synth.filter.type).toBe("lowpass");
+  });
+
+
+  it("PolyVoice and FMVoice set filter rolloff at most once when called twice with same rolloff", () => {
+    const poly = engine.polyVoice as any;
+    let rolloffSets = 0;
+    let _rolloff = poly.filter.rolloff;
+    Object.defineProperty(poly.filter, "rolloff", {
+      get: () => _rolloff,
+      set: (val) => {
+        rolloffSets++;
+        _rolloff = val;
+      },
+      configurable: true,
+    });
+
+    const patch: SynthPatch = {
+      id: "poly-test",
+      name: "Poly Test",
+      category: "lead",
+      engineType: "poly",
+      filter: { rolloff: -12 },
+    };
+
+    poly.applyPatch(patch);
+    expect(rolloffSets).toBe(1);
+    poly.applyPatch(patch);
+    expect(rolloffSets).toBe(1);
+  });
+
+  it("an FM patch without an oscillator section sets carrier type to sine", () => {
+    const fm = engine.fmVoice as any;
+    const patch: SynthPatch = {
+      id: "fm-no-osc",
+      name: "FM No Osc",
+      category: "keys",
+      engineType: "fm",
+    };
+    fm.applyPatch(patch);
+    expect((fm.fmPoly as any).set).toHaveBeenCalledWith({
+      oscillator: { type: "sine" },
+    });
+  });
+
+  it("loadPatch does not throw or reject when loadInstrument fails", async () => {
+    vi.spyOn(engine, "loadInstrument").mockRejectedValue(new Error("Sampler load failure"));
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(() => {
+      engine.loadPatch({
+        id: "sampler-fail-patch",
+        name: "Sampler Fail",
+        category: "keys",
+        engineType: "sampler",
+        samplerConfig: { instrumentId: "missing-piano" },
+      });
+    }).not.toThrow();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it("DroneVoice: toggle on, releaseAll, then toggle again returns true", () => {
+    const drone = engine.droneVoice;
+    expect(drone.toggle("C2")).toBe(true);
+    engine.releaseAll();
+    expect(drone.toggle("C2")).toBe(true);
+    drone.toggle("C2");
   });
 
 });

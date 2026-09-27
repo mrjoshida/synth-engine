@@ -44,7 +44,11 @@ export class MoogVoice extends PooledVoice<Tone.MonoSynth> {
   }
 
   protected applySynth(synth: Tone.MonoSynth, patch: SynthPatch, smooth?: boolean): void {
-    const oscConfig = toToneOscillator(patch.oscillator);
+    const oscConfig = toToneOscillator({
+      type: getEffectiveParam(patch, "oscillator.type") as any,
+      count: patch.oscillator?.count,
+      spread: patch.oscillator?.spread,
+    });
     (synth as any).set({ oscillator: oscConfig });
 
     const attack = Number(getEffectiveParam(patch, "envelope.attack"));

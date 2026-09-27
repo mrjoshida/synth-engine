@@ -51,6 +51,8 @@ export abstract class PooledVoice<
     // Pre-warm ONE synth
     this.getOrCreateSynth(0);
 
+    this.applyChain?.(this.currentPatch(), false);
+
     this.isInitialized = true;
   }
 

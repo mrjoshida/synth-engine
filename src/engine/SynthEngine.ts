@@ -459,7 +459,7 @@ export class SynthEngine {
 
   public loadPatch(patch: SynthPatch): void {
     if (patch.samplerConfig) {
-      this.loadInstrument(patch.samplerConfig.instrumentId);
+      void this.loadInstrument(patch.samplerConfig.instrumentId).catch((e) => console.warn(e));
     }
     const voice = this.getVoice(patch.engineType);
     voice.applyPatch(patch);

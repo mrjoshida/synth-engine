@@ -75,7 +75,11 @@ export class PolyVoice extends BaseVoice {
     const smooth = opts?.smooth ?? false;
 
     // Oscillator configuration (unison stays raw)
-    const oscConfig = toToneOscillator(patch.oscillator);
+    const oscConfig = toToneOscillator({
+      type: getEffectiveParam(patch, "oscillator.type") as any,
+      count: patch.oscillator?.count,
+      spread: patch.oscillator?.spread,
+    });
     (this.polySynth as any).set({
       oscillator: oscConfig,
     });
@@ -97,9 +101,13 @@ export class PolyVoice extends BaseVoice {
     const q = Number(getEffectiveParam(patch, "filter.Q"));
 
     setToneParam(this.filter.frequency, freq, smooth);
-    this.filter.type = fType as any;
+    if (this.filter.type !== fType) {
+      this.filter.type = fType as any;
+    }
     if (rolloff !== undefined && !Number.isNaN(rolloff)) {
-      this.filter.rolloff = rolloff as any;
+      if (this.filter.rolloff !== rolloff) {
+        this.filter.rolloff = rolloff as any;
+      }
     }
     if (q !== undefined && !Number.isNaN(q)) {
       setToneParam(this.filter.Q, q, smooth);
