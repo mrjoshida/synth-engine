@@ -23,6 +23,8 @@ import { SynthEngineType, SynthEngineInitOptions, MidiNoteEvent, SynthPatch, FxC
 export class SynthEngine {
   private initialized = false;
   private initPromise: Promise<void> | null = null;
+  /** Bumped by dispose() so an initialization still in flight knows it was cancelled. */
+  private initGeneration = 0;
 
   // Voices
   public polyVoice = new PolyVoice();
@@ -70,6 +72,7 @@ export class SynthEngine {
   }
 
   private async initAudioGraph(opts?: SynthEngineInitOptions): Promise<void> {
+    const generation = this.initGeneration;
     if (opts?.latencyHint !== undefined && ("getContext" in Tone) && ("setContext" in Tone) && typeof (Tone as any).getContext === "function" && typeof (Tone as any).setContext === "function") {
       const currentContext = (Tone as any).getContext();
       if (currentContext && currentContext.state !== "running") {
@@ -94,29 +97,35 @@ export class SynthEngine {
 
     const fxInput = this.fxRack.getInput();
 
+    // disconnect() first: a retried init must not add a second route (Web Audio does not dedupe).
     await this.polyVoice.init();
-    this.polyVoice.connect(fxInput);
+    this.polyVoice.disconnect().connect(fxInput);
 
     await this.fmVoice.init();
-    this.fmVoice.connect(fxInput);
+    this.fmVoice.disconnect().connect(fxInput);
 
     await this.pluckVoice.init();
-    this.pluckVoice.connect(fxInput);
+    this.pluckVoice.disconnect().connect(fxInput);
 
     await this.moogVoice.init();
-    this.moogVoice.connect(fxInput);
+    this.moogVoice.disconnect().connect(fxInput);
 
     await this.droneVoice.init();
-    this.droneVoice.connect(fxInput);
+    this.droneVoice.disconnect().connect(fxInput);
 
     await this.membraneVoice.init();
-    this.membraneVoice.connect(fxInput);
+    this.membraneVoice.disconnect().connect(fxInput);
 
     await this.samplerVoice.init();
-    this.samplerVoice.connect(fxInput);
+    this.samplerVoice.disconnect().connect(fxInput);
 
     if (opts?.webMidi !== false) {
       await this.webMidi.init();
+    }
+
+    if (generation !== this.initGeneration) {
+      // dispose() ran while this initialization was in flight; leave the engine uninitialized.
+      return;
     }
 
     this.sessionStartTime = Tone.now();
@@ -501,6 +510,7 @@ export class SynthEngine {
     this.fxRack.dispose();
     this.initialized = false;
     this.initPromise = null;
+    this.initGeneration++;
   }
 }
 

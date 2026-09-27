@@ -39,6 +39,7 @@ const { MockContext, activeContext } = vi.hoisted(() => {
 vi.mock("tone", () => {
   class MockNode {
     connect() { return this; }
+    disconnect() { return this; }
     toDestination() { return this; }
     dispose() {}
     start() { return this; }
@@ -415,6 +416,39 @@ describe("SynthEngine v0.3.0 init options", () => {
     const polyInitSpy = vi.spyOn(engine.polyVoice, "init");
     await engine.init();
     expect(polyInitSpy).toHaveBeenCalledTimes(1);
+    engine.dispose();
+  });
+
+  it("a retry after a late failure does not double any voice's routing", async () => {
+    const engine = new SynthEngine();
+    vi.spyOn(engine.webMidi, "init").mockRejectedValueOnce(new Error("denied"));
+    const connectSpy = vi.spyOn(engine.polyVoice, "connect");
+    const disconnectSpy = vi.spyOn(engine.polyVoice, "disconnect");
+
+    await expect(engine.init()).rejects.toThrow("denied");
+    await engine.init();
+
+    expect(connectSpy).toHaveBeenCalledTimes(2);
+    expect(disconnectSpy).toHaveBeenCalledTimes(2);
+    connectSpy.mock.invocationCallOrder.forEach((connectOrder, i) => {
+      expect(disconnectSpy.mock.invocationCallOrder[i]).toBeLessThan(connectOrder);
+    });
+    engine.dispose();
+  });
+
+  it("dispose during an in-flight init leaves the engine uninitialized", async () => {
+    const engine = new SynthEngine();
+    const attackSpy = vi.spyOn(engine.polyVoice, "triggerAttack");
+
+    const inFlight = engine.init();
+    engine.dispose();
+    await inFlight;
+    engine.noteOn(60);
+    expect(attackSpy).not.toHaveBeenCalled();
+
+    await engine.init();
+    engine.noteOn(60);
+    expect(attackSpy).toHaveBeenCalledTimes(1);
     engine.dispose();
   });
 });
