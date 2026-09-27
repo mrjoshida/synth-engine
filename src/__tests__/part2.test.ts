@@ -133,7 +133,7 @@ vi.mock("tone", () => {
 });
 
 import { SynthEngine } from "../engine/SynthEngine";
-import { toToneOscillator } from "../voices/helpers";
+import { setToneParam, toToneOscillator } from "../voices/helpers";
 import { SynthPatch } from "../types";
 import { VoiceAllocator } from "../voices/VoiceAllocator";
 import { PluckVoice } from "../voices/PluckVoice";
@@ -718,6 +718,21 @@ describe("Part 2: Polyphony, Voice Pooling & Engine Enhancements", () => {
     sampler.stopNote("2:60");
     expect(releaseSpy).toHaveBeenCalledTimes(1);
     expect(releaseSpy).toHaveBeenCalledWith("C4", undefined);
+  });
+
+  it("setToneParam ignores non-finite values and still applies finite ones", () => {
+    const param = { value: 0.5, rampTo: vi.fn() };
+    for (const bad of [NaN, Infinity, -Infinity]) {
+      setToneParam(param, bad, true);
+      setToneParam(param, bad, false);
+    }
+    expect(param.rampTo).not.toHaveBeenCalled();
+    expect(param.value).toBe(0.5);
+
+    setToneParam(param, 0.25, true);
+    expect(param.rampTo).toHaveBeenCalledWith(0.25, 0.05);
+    setToneParam(param, 0.75, false);
+    expect(param.value).toBe(0.75);
   });
 
 });

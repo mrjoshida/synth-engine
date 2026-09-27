@@ -67,7 +67,7 @@ export function toToneOscillator(osc: {
  * @param smooth Whether to ramp smoothly over 0.05 seconds.
  */
 export function setToneParam(param: any, value: number, smooth: boolean = false): void {
-  if (!param) return;
+  if (!param || !Number.isFinite(value)) return;
   if (smooth && typeof param.rampTo === "function") {
     param.rampTo(value, 0.05);
   } else if ("value" in param) {
