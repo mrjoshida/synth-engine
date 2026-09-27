@@ -1,6 +1,12 @@
+/**
+ * @file FMVoice implementation with Tone.PolySynth and Tone.FMSynth.
+ */
+
 import * as Tone from "tone";
-import { BaseVoice } from "./Voice";
+import { BaseVoice, ApplyPatchOptions } from "./Voice";
 import { SynthPatch } from "../types";
+import { toToneOscillator, setToneParam } from "./helpers";
+import { getEffectiveParam } from "../params/patch";
 
 export class FMVoice extends BaseVoice {
   private fmPoly: Tone.PolySynth<Tone.FMSynth> | null = null;
@@ -14,7 +20,8 @@ export class FMVoice extends BaseVoice {
     this.filter = new Tone.Filter({
       frequency: 8000,
       type: "lowpass",
-      rolloff: -12
+      rolloff: -12,
+      Q: 1.5,
     });
 
     this.fmPoly = new Tone.PolySynth(Tone.FMSynth, {
@@ -25,15 +32,15 @@ export class FMVoice extends BaseVoice {
         attack: 0.002,
         decay: 0.8,
         sustain: 0.1,
-        release: 1.2
+        release: 1.2,
       },
       modulation: { type: "triangle" },
       modulationEnvelope: {
         attack: 0.005,
         decay: 0.5,
         sustain: 0.05,
-        release: 0.8
-      }
+        release: 0.8,
+      },
     });
 
     this.fmPoly.connect(this.filter);
@@ -42,7 +49,12 @@ export class FMVoice extends BaseVoice {
     this.isInitialized = true;
   }
 
-  public triggerAttackRelease(note: string | string[], duration: string | number, time?: number, velocity: number = 0.8): void {
+  public triggerAttackRelease(
+    note: string | string[],
+    duration: string | number,
+    time?: number,
+    velocity: number = 0.8
+  ): void {
     if (!this.fmPoly) return;
     try {
       this.fmPoly.triggerAttackRelease(note, duration, time, velocity);
@@ -62,28 +74,68 @@ export class FMVoice extends BaseVoice {
     if (hasNote) {
       this.fmPoly.triggerRelease(note!, time);
     } else {
+      this.clearKeyMap();
       this.fmPoly.releaseAll(time);
     }
   }
 
-  public applyPatch(patch: SynthPatch): void {
+  public applyPatch(patch: SynthPatch, opts?: ApplyPatchOptions): void {
     if (!this.fmPoly) return;
+    const smooth = opts?.smooth ?? false;
 
-    if (patch.fmParams) {
-      (this.fmPoly as any).set({
-        harmonicity: patch.fmParams.harmonicity,
-        modulationIndex: patch.fmParams.modulationIndex,
-        modulation: { type: patch.fmParams.modulationType },
-        modulationEnvelope: patch.fmParams.modulationEnvelope
-      });
-    }
+    // Carrier oscillator
+    const oscConfig = toToneOscillator(patch.oscillator);
+    (this.fmPoly as any).set({
+      oscillator: oscConfig,
+    });
 
-    if (patch.envelope) {
-      (this.fmPoly as any).set({ envelope: patch.envelope });
-    }
+    // Carrier envelope
+    const attack = Number(getEffectiveParam(patch, "envelope.attack"));
+    const decay = Number(getEffectiveParam(patch, "envelope.decay"));
+    const sustain = Number(getEffectiveParam(patch, "envelope.sustain"));
+    const release = Number(getEffectiveParam(patch, "envelope.release"));
 
-    if (patch.oscillator) {
-      (this.fmPoly as any).set({ oscillator: { type: patch.oscillator.type } });
+    (this.fmPoly as any).set({
+      envelope: { attack, decay, sustain, release },
+    });
+
+    // FM parameters
+    const harmonicity = Number(getEffectiveParam(patch, "fmParams.harmonicity"));
+    const modulationIndex = Number(getEffectiveParam(patch, "fmParams.modulationIndex"));
+    const modType = String(getEffectiveParam(patch, "fmParams.modulationType"));
+
+    const modAtt = Number(getEffectiveParam(patch, "fmParams.modulationEnvelope.attack"));
+    const modDec = Number(getEffectiveParam(patch, "fmParams.modulationEnvelope.decay"));
+    const modSus = Number(getEffectiveParam(patch, "fmParams.modulationEnvelope.sustain"));
+    const modRel = Number(getEffectiveParam(patch, "fmParams.modulationEnvelope.release"));
+
+    (this.fmPoly as any).set({
+      harmonicity,
+      modulationIndex,
+      modulation: { type: modType },
+      modulationEnvelope: {
+        attack: modAtt,
+        decay: modDec,
+        sustain: modSus,
+        release: modRel,
+      },
+    });
+
+    // Filter
+    if (this.filter) {
+      const freq = Number(getEffectiveParam(patch, "filter.frequency"));
+      const fType = String(getEffectiveParam(patch, "filter.type"));
+      const rolloff = Number(getEffectiveParam(patch, "filter.rolloff"));
+      const q = Number(getEffectiveParam(patch, "filter.Q"));
+
+      setToneParam(this.filter.frequency, freq, smooth);
+      this.filter.type = fType as any;
+      if (rolloff !== undefined && !Number.isNaN(rolloff)) {
+        this.filter.rolloff = rolloff as any;
+      }
+      if (q !== undefined && !Number.isNaN(q)) {
+        setToneParam(this.filter.Q, q, smooth);
+      }
     }
   }
 
@@ -94,6 +146,7 @@ export class FMVoice extends BaseVoice {
     this.fmPoly = null;
     this.filter = null;
     this.outputNode = null;
+    this.clearKeyMap();
     this.isInitialized = false;
   }
 }

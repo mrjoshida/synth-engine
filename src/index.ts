@@ -14,3 +14,7 @@ export * from "./midi/MidiFileEncoder";
 export * from "./presets/builtinPresets";
 export * from "./presets/PresetManager";
 export * from "./engine/SynthEngine";
+export * from "./params/specs";
+export * from "./params/patch";
+export { getDefaultParam } from "./params/specs";
+export * from "./params/sanitize";

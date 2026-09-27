@@ -19,6 +19,7 @@ import { WebMidiManager } from "../midi/WebMidiManager";
 import { MidiFileEncoder } from "../midi/MidiFileEncoder";
 import { PresetManager } from "../presets/PresetManager";
 import { SynthEngineType, SynthEngineInitOptions, MidiNoteEvent, SynthPatch, FxConfig } from "../types";
+import { clonePatch, INIT_PATCH, FX_BASELINE, setPatchParam, getPatchParam } from "../params/patch";
 
 export class SynthEngine {
   private initialized = false;
@@ -43,6 +44,10 @@ export class SynthEngine {
   // Recording Buffer
   private sessionEvents: MidiNoteEvent[] = [];
   private sessionStartTime: number = 0;
+
+  // Patch and Active Note Routing State
+  private currentPatch: SynthPatch = clonePatch(INIT_PATCH as SynthPatch);
+  private activeNotes: Map<string, SynthEngineType> = new Map();
 
   // Audio State Listeners
   private audioStateListeners: Set<(state: "suspended" | "running" | "closed" | "interrupted") => void> = new Set();
@@ -129,6 +134,14 @@ export class SynthEngine {
     if (opts?.webMidi !== false) {
       await this.webMidi.init();
       if (cancelled()) return;
+    }
+
+    // Apply currentPatch to voices and fxRack so pre-init calls take effect
+    const voice = this.getVoice(this.currentPatch.engineType);
+    voice.applyPatch(this.currentPatch);
+    this.fxRack.setConfig({ ...FX_BASELINE, ...(this.currentPatch.fxSends || {}) });
+    if (this.currentPatch.engineType === "sampler" && this.currentPatch.samplerConfig) {
+      void this.loadInstrument(this.currentPatch.samplerConfig.instrumentId).catch((e) => console.warn(e));
     }
 
     this.sessionStartTime = Tone.now();
@@ -244,7 +257,7 @@ export class SynthEngine {
    * Triggers a sustained note-on event on the specified voice and forwards to Web MIDI.
    *
    * Note on caller responsibility: The caller is responsible for refcounting or deduplicating
-   * duplicate noteOn calls for the same pitch (e.g. across multiple overlapping pads or keys in Fretmancer)
+   * duplicate noteOn calls for the same pitch (e.g. across multiple overlapping pads or keys in a host app)
    * before calling noteOff.
    *
    * @param note MIDI note number (0-127) or pitch notation string (e.g. 'C4')
@@ -258,7 +271,7 @@ export class SynthEngine {
   ): void {
     if (!this.initialized) return;
 
-    const voiceType = opts?.voiceType ?? "poly";
+    const voiceType = opts?.voiceType ?? this.currentPatch.engineType;
     const channel = opts?.channel ?? 1;
 
     let pitch: string;
@@ -272,18 +285,26 @@ export class SynthEngine {
       midiNum = pitchToMidiNumber(note);
     }
 
+    const noteKey = `${channel}:${midiNum}`;
+    const prevVoice = this.activeNotes.get(noteKey);
+    if (prevVoice && prevVoice !== voiceType) {
+      this.getVoice(prevVoice).stopNote(noteKey);
+    }
+
     const clampedVelocity = Math.max(0, Math.min(1, velocity));
     const voice = this.getVoice(voiceType);
-    voice.triggerAttack(pitch, undefined, clampedVelocity);
+    voice.startNote(noteKey, pitch, clampedVelocity);
+    this.activeNotes.set(noteKey, voiceType);
 
     this.webMidi.sendNoteOn(midiNum, clampedVelocity, channel);
   }
 
   /**
-   * Releases a sustained note on the specified voice and forwards to Web MIDI.
+   * Releases a sustained note on the recorded or specified voice and forwards to Web MIDI.
+   * The recorded voice wins over opts.voiceType or currentPatch.engineType.
    *
-   * @param note MIDI note number (0-127) or pitch notation string (e.g. 'C4')
-   * @param opts Optional configuration for voiceType (default: 'poly') and MIDI channel (default: 1)
+   * @param note MIDI note number (0-127) or pitch notation string (e.g. C4)
+   * @param opts Optional configuration for voiceType and MIDI channel (default: 1)
    */
   public noteOff(
     note: number | string,
@@ -291,7 +312,6 @@ export class SynthEngine {
   ): void {
     if (!this.initialized) return;
 
-    const voiceType = opts?.voiceType ?? "poly";
     const channel = opts?.channel ?? 1;
 
     let pitch: string;
@@ -305,8 +325,13 @@ export class SynthEngine {
       midiNum = pitchToMidiNumber(note);
     }
 
-    const voice = this.getVoice(voiceType);
-    voice.triggerRelease(pitch);
+    const noteKey = `${channel}:${midiNum}`;
+    const recordedVoice = this.activeNotes.get(noteKey);
+    const targetVoiceType = recordedVoice ?? opts?.voiceType ?? this.currentPatch.engineType;
+
+    const voice = this.getVoice(targetVoiceType);
+    voice.stopNote(noteKey);
+    this.activeNotes.delete(noteKey);
 
     this.webMidi.sendNoteOff(midiNum, channel);
   }
@@ -317,6 +342,7 @@ export class SynthEngine {
    * @param time Optional release time scheduling
    */
   public releaseAll(time?: any): void {
+    this.activeNotes.clear();
     const voices = [
       this.polyVoice,
       this.fmVoice,
@@ -439,18 +465,59 @@ export class SynthEngine {
     voice.applyPatch(patch);
     
     // Always reset baseline FX sends first, then apply patch-specific sends
-    const baselineSends: Partial<FxConfig> = {
-      reverbWet: 0.15,
-      reverbDecay: 3.75,
-      chorusWet: 0.0,
-      chorusFrequency: 1.5,
-      chorusDepth: 0.6,
-      delayWet: 0.0,
-      delayTime: "8n.",
-      delayFeedback: 0.3,
-      masterVolume: 0.85
-    };
-    this.fxRack.setConfig({ ...baselineSends, ...(patch.fxSends || {}) });
+    this.fxRack.setConfig({ ...FX_BASELINE, ...(patch.fxSends || {}) });
+
+    this.currentPatch = { ...clonePatch(patch), schemaVersion: 1 };
+  }
+
+  /**
+   * Loads a preset by its identifier.
+   * Returns true if found and loaded, false otherwise.
+   * @param id Preset identifier.
+   */
+  public loadPreset(id: string): boolean {
+    const preset = this.presets.getById(id);
+    if (!preset) return false;
+    this.loadPatch(preset);
+    return true;
+  }
+
+  /**
+   * Returns a copy of the current active patch.
+   */
+  public getPatch(): SynthPatch {
+    return clonePatch(this.currentPatch);
+  }
+
+  /**
+   * Returns the current patch engine type.
+   */
+  public getVoiceType(): SynthEngineType {
+    return this.currentPatch.engineType;
+  }
+
+  /**
+   * Updates a single parameter path in the current patch.
+   * Clamps and validates the value. Returns true on success, false on invalid path or value.
+   * @param path Dot path into SynthPatch.
+   * @param value New parameter value.
+   */
+  public setParam(path: string, value: unknown): boolean {
+    const next = setPatchParam(this.currentPatch, path, value);
+    if (!next) return false;
+
+    if (path === "engineType" || next.engineType !== this.currentPatch.engineType) {
+      this.loadPatch(next);
+    } else if (path.startsWith("fxSends.")) {
+      const fxKey = path.slice("fxSends.".length);
+      const clampedVal = getPatchParam(next, path);
+      this.fxRack.setConfig({ [fxKey]: clampedVal } as any, { smooth: true });
+    } else {
+      this.getVoice(next.engineType).applyPatch(next, { smooth: true });
+    }
+
+    this.currentPatch = next;
+    return true;
   }
 
   public startTransport(): void {
@@ -502,6 +569,7 @@ export class SynthEngine {
       this.audioContextHandler = null;
     }
     this.audioStateListeners.clear();
+    this.activeNotes.clear();
 
     this.polyVoice.dispose();
     this.fmVoice.dispose();

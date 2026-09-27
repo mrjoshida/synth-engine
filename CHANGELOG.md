@@ -5,6 +5,30 @@ All notable changes to `@mrjoshida/synth-engine` will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-09-27
+
+### Added
+- Parameter specification and validation module (`PARAM_SPECS`, `getParamSpec`, `getParamSpecs`, `getDefaultParam`, `clampParam`).
+- Pure patch management utilities (`INIT_PATCH`, `FX_BASELINE`, `PATCH_SCHEMA_VERSION`, `clonePatch`, `getPatchParam`, `getEffectiveParam`, `setPatchParam`, `withEngineType`).
+- Secure patch sanitization (`sanitizePatch`) protecting against malformed structures and prototype pollution.
+- Dynamic polyphonic voice pooling for Pluck, Moog, Drone, and Membrane engines driven by internal `VoiceAllocator` (`PooledVoice`, up to 12 voices each).
+- Live keyed note API on `BaseVoice` (`startNote`, `stopNote`).
+- `SynthEngine.loadPreset(id)`, `SynthEngine.getPatch()`, `SynthEngine.getVoiceType()`, and `SynthEngine.setParam(path, value)`.
+- Smooth audio parameter transitions with `rampTo` on `applyPatch` and `FxRack.setConfig`.
+- FMVoice filter control matching patch filter specifications.
+- A patch loaded or edited before `init()` is applied by `init()`.
+- Legacy `triggerAttack` on pluck and membrane stays a one-shot.
+
+### Changed
+- Behavioral change: `noteOn`/`noteOff` without `voiceType` now use the loaded patch's voice instead of always "poly".
+- Sampler built-in presets (`sampler-grand-piano`, `sampler-electric-piano`, `sampler-celesta`) envelope attack/decay updated from 0 to 0.001 to conform to the 0.001 min log scale parameter range (SamplerVoice ignores envelope so audible playback is unchanged).
+
+### Fixed
+- Presets using "fatsaw" (`poly-neon-sunrise`, `poly-microtonal-haze`) threw a Tone TypeError on load.
+- Unison count/spread, filter rolloff and Q = 0 were ignored.
+- Presets now sound the same whatever was loaded before: voices reset absent fields to engine defaults.
+- Pooled voices: chords now sound on pluck/moog/drone/membrane (they played a single note before).
+
 ## [0.3.1] - 2026-09-27
 
 ### Changed

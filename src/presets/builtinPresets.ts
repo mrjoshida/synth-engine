@@ -217,7 +217,7 @@ export const BUILTIN_SYNTH_PRESETS: SynthPatch[] = [
     category: "keys",
     engineType: "sampler",
     description: "Concert grand piano with natural dynamics and sustain. Sample-based instrument.",
-    envelope: { attack: 0.0, decay: 0.0, sustain: 1.0, release: 0.5 },
+    envelope: { attack: 0.001, decay: 0.001, sustain: 1.0, release: 0.5 },
     samplerConfig: { instrumentId: "grand-piano" },
     fxSends: { reverbWet: 0.25, chorusWet: 0.0 }
   },
@@ -227,7 +227,7 @@ export const BUILTIN_SYNTH_PRESETS: SynthPatch[] = [
     category: "keys",
     engineType: "sampler",
     description: "Warm Rhodes-style electric piano with subtle chorus and natural warmth.",
-    envelope: { attack: 0.0, decay: 0.0, sustain: 1.0, release: 0.3 },
+    envelope: { attack: 0.001, decay: 0.001, sustain: 1.0, release: 0.3 },
     samplerConfig: { instrumentId: "electric-piano" },
     fxSends: { reverbWet: 0.2, chorusWet: 0.3 }
   },
@@ -237,7 +237,7 @@ export const BUILTIN_SYNTH_PRESETS: SynthPatch[] = [
     category: "bell",
     engineType: "sampler",
     description: "Delicate orchestral celesta with ethereal reverb. Sample-based bell tones.",
-    envelope: { attack: 0.0, decay: 0.0, sustain: 1.0, release: 0.8 },
+    envelope: { attack: 0.001, decay: 0.001, sustain: 1.0, release: 0.8 },
     samplerConfig: { instrumentId: "celesta" },
     fxSends: { reverbWet: 0.5, delayWet: 0.15 }
   }

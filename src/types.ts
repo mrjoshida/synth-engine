@@ -54,6 +54,8 @@ export interface SamplerInstrumentConfig {
 }
 
 export interface SynthPatch {
+  /** Patch format version, currently 1. */
+  schemaVersion?: number;
   id: string;
   name: string;
   category: "pad" | "lead" | "pluck" | "bass" | "drone" | "percussion" | "bell" | "keys";
