@@ -466,4 +466,21 @@ describe("SynthEngine v0.3.0 init options", () => {
     expect(polyConnectSpy).not.toHaveBeenCalled();
     expect(samplerConnectSpy).not.toHaveBeenCalled();
   });
+
+  it("init requests an audio start only when audio is not already running", async () => {
+    const startSpy = vi.mocked(Tone.start);
+    startSpy.mockClear();
+
+    const whileRunning = new SynthEngine();
+    await whileRunning.init();
+    expect(startSpy).not.toHaveBeenCalled();
+    whileRunning.dispose();
+
+    activeContext.current = new MockContext();
+    activeContext.current.state = "suspended";
+    const whileSuspended = new SynthEngine();
+    await whileSuspended.init();
+    expect(startSpy).toHaveBeenCalledTimes(1);
+    whileSuspended.dispose();
+  });
 });
