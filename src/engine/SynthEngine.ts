@@ -95,7 +95,13 @@ export class SynthEngine {
     // initialization never touches the graph again (a newer init() may already be wiring it).
     const cancelled = () => generation !== this.initGeneration;
 
-    if (typeof (Tone as any).start === "function") {
+    // Tone.start() always calls resume(). Skip it when audio is already running, so unlock() in a
+    // gesture followed by init() makes one resume request, not two.
+    const running =
+      "getContext" in Tone &&
+      typeof (Tone as any).getContext === "function" &&
+      (Tone as any).getContext()?.state === "running";
+    if (!running && typeof (Tone as any).start === "function") {
       await Tone.start();
       if (cancelled()) return;
     }
