@@ -451,4 +451,19 @@ describe("SynthEngine v0.3.0 init options", () => {
     expect(attackSpy).toHaveBeenCalledTimes(1);
     engine.dispose();
   });
+
+  it("a disposed in-flight init stops before touching any voice", async () => {
+    const engine = new SynthEngine();
+    const polyInitSpy = vi.spyOn(engine.polyVoice, "init");
+    const polyConnectSpy = vi.spyOn(engine.polyVoice, "connect");
+    const samplerConnectSpy = vi.spyOn(engine.samplerVoice, "connect");
+
+    const inFlight = engine.init();
+    engine.dispose();
+    await inFlight;
+
+    expect(polyInitSpy).not.toHaveBeenCalled();
+    expect(polyConnectSpy).not.toHaveBeenCalled();
+    expect(samplerConnectSpy).not.toHaveBeenCalled();
+  });
 });

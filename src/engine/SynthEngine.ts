@@ -57,6 +57,7 @@ export class SynthEngine {
    * @param opts.latencyHint AudioContext latency hint, applied only while audio is not yet running.
    * @param opts.lookAhead Tone.js scheduling look-ahead in seconds. Use `0` for live play: notes are
    *   triggered "now", and Tone's default look-ahead (0.1 s) would delay every note by that much.
+   *   Keep a look-ahead if you schedule sequences on the Transport.
    * @param opts.webMidi Pass `false` when the host app manages Web MIDI itself. Skips the engine's
    *   own MIDI access request and its permission prompt. Defaults to `true`.
    */
@@ -90,42 +91,38 @@ export class SynthEngine {
 
     this.ensureAudioContextListener();
 
+    // dispose() bumps initGeneration. Stop at the first await it interrupts, so a cancelled
+    // initialization never touches the graph again (a newer init() may already be wiring it).
+    const cancelled = () => generation !== this.initGeneration;
+
     if (typeof (Tone as any).start === "function") {
       await Tone.start();
+      if (cancelled()) return;
     }
     await this.fxRack.init();
+    if (cancelled()) return;
 
     const fxInput = this.fxRack.getInput();
-
-    // disconnect() first: a retried init must not add a second route (Web Audio does not dedupe).
-    await this.polyVoice.init();
-    this.polyVoice.disconnect().connect(fxInput);
-
-    await this.fmVoice.init();
-    this.fmVoice.disconnect().connect(fxInput);
-
-    await this.pluckVoice.init();
-    this.pluckVoice.disconnect().connect(fxInput);
-
-    await this.moogVoice.init();
-    this.moogVoice.disconnect().connect(fxInput);
-
-    await this.droneVoice.init();
-    this.droneVoice.disconnect().connect(fxInput);
-
-    await this.membraneVoice.init();
-    this.membraneVoice.disconnect().connect(fxInput);
-
-    await this.samplerVoice.init();
-    this.samplerVoice.disconnect().connect(fxInput);
+    const voices = [
+      this.polyVoice,
+      this.fmVoice,
+      this.pluckVoice,
+      this.moogVoice,
+      this.droneVoice,
+      this.membraneVoice,
+      this.samplerVoice,
+    ];
+    for (const voice of voices) {
+      await voice.init();
+      if (cancelled()) return;
+      // Disconnect first: a retried init must not add a second route (Web Audio does not dedupe).
+      voice.disconnect();
+      voice.connect(fxInput);
+    }
 
     if (opts?.webMidi !== false) {
       await this.webMidi.init();
-    }
-
-    if (generation !== this.initGeneration) {
-      // dispose() ran while this initialization was in flight; leave the engine uninitialized.
-      return;
+      if (cancelled()) return;
     }
 
     this.sessionStartTime = Tone.now();
