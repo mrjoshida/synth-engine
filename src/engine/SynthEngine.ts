@@ -378,11 +378,38 @@ export class SynthEngine {
   }
 
   /**
-   * Emergency panic: immediately silences all 7 voices at Tone.now() and sends all-notes-off CCs.
+   * Emergency panic: hard-mutes all voices and FX within ~10 ms, then restores normal playability (~120 ms).
+   * Also sends MIDI all-notes-off CCs. Does not throw before init.
    */
   public panic(): void {
-    this.releaseAll(Tone.now());
-    this.webMidi.allNotesOff();
+    const now = Tone.now();
+    this.activeNotes.clear();
+    const voices = [
+      this.polyVoice,
+      this.fmVoice,
+      this.pluckVoice,
+      this.moogVoice,
+      this.droneVoice,
+      this.membraneVoice,
+      this.samplerVoice
+    ];
+    for (const v of voices) {
+      try {
+        v.hardStop(now);
+      } catch (e) {
+        console.warn("Error hard-stopping voice in panic:", e);
+      }
+    }
+    try {
+      this.fxRack.hardMute(now);
+    } catch (e) {
+      console.warn("Error hard-muting fxRack in panic:", e);
+    }
+    try {
+      this.webMidi.allNotesOff();
+    } catch (e) {
+      console.warn("Error sending allNotesOff in panic:", e);
+    }
   }
 
   public playNote(

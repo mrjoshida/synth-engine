@@ -3,7 +3,7 @@
  */
 
 import * as Tone from "tone";
-import { BaseVoice, ApplyPatchOptions } from "./Voice";
+import { BaseVoice, ApplyPatchOptions, HARD_STOP_RELEASE_S } from "./Voice";
 import { SynthEngineType, SynthPatch } from "../types";
 import { VoiceAllocator } from "./VoiceAllocator";
 import { INIT_PATCH, withEngineType } from "../params/patch";
@@ -30,6 +30,7 @@ export abstract class PooledVoice<
   protected abstract buildChain(output: Tone.Gain): Tone.InputNode;
   protected abstract applySynth(synth: TSynth, patch: SynthPatch, smooth?: boolean): void;
   protected abstract releaseSeconds(synth: TSynth): number;
+  protected abstract overrideRelease(synth: TSynth, seconds: number): () => void;
   protected applyChain?(_patch: SynthPatch, _smooth?: boolean): void;
 
   /**
@@ -81,6 +82,32 @@ export abstract class PooledVoice<
     } catch (e) {
       console.error(`${this.engine} startNote error:`, e);
     }
+  }
+
+  public override hardStop(time?: number): void {
+    const now = time ?? Tone.now();
+    for (let i = 0; i < this.synths.length; i++) {
+      const synth = this.synths[i];
+      let restore: (() => void) | null = null;
+      try {
+        restore = this.overrideRelease(synth, HARD_STOP_RELEASE_S);
+      } catch (e) {
+        console.error(`${this.engine} overrideRelease error:`, e);
+      }
+      try {
+        synth.triggerRelease?.(now);
+      } catch (e) {
+        console.error(`${this.engine} hardStop synth error:`, e);
+      } finally {
+        try {
+          restore?.();
+        } catch (e) {
+          console.error(`${this.engine} restoreRelease error:`, e);
+        }
+      }
+    }
+    this.allocator.releaseAll(now, HARD_STOP_RELEASE_S);
+    this.clearKeyMap();
   }
 
   public override stopNote(key: string, time?: number): void {

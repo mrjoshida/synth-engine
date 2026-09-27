@@ -1,5 +1,5 @@
 import * as Tone from "tone";
-import { BaseVoice } from "./Voice";
+import { BaseVoice, HARD_STOP_RELEASE_S } from "./Voice";
 import { SynthPatch, SamplerInstrumentConfig } from "../types";
 
 export class SamplerVoice extends BaseVoice {
@@ -146,6 +146,33 @@ export class SamplerVoice extends BaseVoice {
       }
     } catch (e) {
       console.warn("SamplerVoice failed to triggerRelease:", e);
+    }
+  }
+
+  public override hardStop(time?: number): void {
+    this.clearKeyMap();
+    if (this.sampler) {
+      const samplerAny = this.sampler as any;
+      if (samplerAny._activeSources instanceof Map) {
+        for (const sources of samplerAny._activeSources.values()) {
+          if (Array.isArray(sources)) {
+            for (const source of sources) {
+              if (source && typeof source === "object") {
+                try {
+                  source.fadeOut = HARD_STOP_RELEASE_S;
+                } catch {
+                  // Ignore if property is read-only or setter throws
+                }
+              }
+            }
+          }
+        }
+      }
+      try {
+        this.sampler.releaseAll(time);
+      } catch (e) {
+        console.warn("SamplerVoice failed to hardStop:", e);
+      }
     }
   }
 

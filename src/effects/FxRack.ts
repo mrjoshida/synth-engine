@@ -1,6 +1,15 @@
 import * as Tone from "tone";
 import { FxConfig } from "../types";
 import { setToneParam } from "../voices/helpers";
+import { HARD_STOP_RELEASE_S } from "../voices/Voice";
+
+interface InFlightMute {
+  until: number;
+  masterVolume: number;
+  roomSize?: number;
+  delayFeedback?: number;
+  delayWet?: number;
+}
 
 export class FxRack {
   private chorus: Tone.Chorus | null = null;
@@ -9,6 +18,7 @@ export class FxRack {
   private limiter: Tone.Limiter | null = null;
   private masterGain: Tone.Gain | null = null;
   private isInitialized = false;
+  private inFlightMute: InFlightMute | null = null;
 
   public async init(): Promise<void> {
     if (this.isInitialized) return;
@@ -49,21 +59,61 @@ export class FxRack {
     return this.chorus || this.masterGain || Tone.getDestination();
   }
 
+  private isMuteActive(): boolean {
+    if (!this.inFlightMute) return false;
+    let now = 0;
+    try {
+      now = Tone.now();
+    } catch {
+      now = 0;
+    }
+    if (now >= this.inFlightMute.until) {
+      this.inFlightMute = null;
+      return false;
+    }
+    return true;
+  }
+
   public setConfig(cfg: Partial<FxConfig>, opts?: { smooth?: boolean }): void {
     const smooth = opts?.smooth ?? false;
-    if (cfg.masterVolume !== undefined && this.masterGain) {
-      setToneParam(this.masterGain.gain, Math.max(0, Math.min(1.0, cfg.masterVolume)), smooth);
+    const muteActive = this.isMuteActive();
+    let now = 0;
+    if (muteActive) {
+      try {
+        now = Tone.now();
+      } catch {
+        now = 0;
+      }
     }
+
+    if (cfg.masterVolume !== undefined && this.masterGain) {
+      const vol = Math.max(0, Math.min(1.0, cfg.masterVolume));
+      if (muteActive && this.inFlightMute) {
+        this.inFlightMute.masterVolume = vol;
+        const gain = this.masterGain.gain as any;
+        gain?.cancelScheduledValues?.(now);
+      }
+      setToneParam(this.masterGain.gain, vol, smooth);
+    }
+
     if (cfg.reverbWet !== undefined && this.reverb) {
       setToneParam(this.reverb.wet, Math.max(0, Math.min(1.0, cfg.reverbWet)), smooth);
     }
+
     if (cfg.reverbDecay !== undefined && this.reverb) {
       if ("roomSize" in this.reverb) {
-        setToneParam((this.reverb as any).roomSize, Math.max(0.01, Math.min(1.0, cfg.reverbDecay / 5)), smooth);
+        const rsVal = Math.max(0.01, Math.min(1.0, cfg.reverbDecay / 5));
+        if (muteActive && this.inFlightMute) {
+          this.inFlightMute.roomSize = rsVal;
+          const rs = (this.reverb as any).roomSize;
+          rs?.cancelScheduledValues?.(now);
+        }
+        setToneParam((this.reverb as any).roomSize, rsVal, smooth);
       } else if ("decay" in this.reverb) {
         (this.reverb as any).decay = Math.max(0.1, cfg.reverbDecay);
       }
     }
+
     if (cfg.chorusWet !== undefined && this.chorus) {
       setToneParam(this.chorus.wet, Math.max(0, Math.min(1.0, cfg.chorusWet)), smooth);
     }
@@ -73,12 +123,27 @@ export class FxRack {
     if (cfg.chorusDepth !== undefined && this.chorus) {
       this.chorus.depth = cfg.chorusDepth;
     }
+
     if (cfg.delayWet !== undefined && this.delay) {
-      setToneParam(this.delay.wet, Math.max(0, Math.min(1.0, cfg.delayWet)), smooth);
+      const dWet = Math.max(0, Math.min(1.0, cfg.delayWet));
+      if (muteActive && this.inFlightMute) {
+        this.inFlightMute.delayWet = dWet;
+        const wet = this.delay.wet as any;
+        wet?.cancelScheduledValues?.(now);
+      }
+      setToneParam(this.delay.wet, dWet, smooth);
     }
+
     if (cfg.delayFeedback !== undefined && this.delay) {
-      setToneParam(this.delay.feedback, Math.max(0, Math.min(0.95, cfg.delayFeedback)), smooth);
+      const fbVal = Math.max(0, Math.min(0.95, cfg.delayFeedback));
+      if (muteActive && this.inFlightMute) {
+        this.inFlightMute.delayFeedback = fbVal;
+        const fb = this.delay.feedback as any;
+        fb?.cancelScheduledValues?.(now);
+      }
+      setToneParam(this.delay.feedback, fbVal, smooth);
     }
+
     if (cfg.delayTime !== undefined && this.delay) {
       if (typeof cfg.delayTime === "number") {
         setToneParam(this.delay.delayTime, cfg.delayTime, smooth);
@@ -89,24 +154,143 @@ export class FxRack {
   }
 
   public getConfig(): FxConfig {
+    const muteActive = this.isMuteActive();
+    const cached = muteActive ? this.inFlightMute : null;
+
+    let reverbDecay = 2.5;
+    if (cached?.roomSize !== undefined) {
+      reverbDecay = cached.roomSize * 5;
+    } else if (this.reverb) {
+      if ("roomSize" in this.reverb) {
+        reverbDecay = Number((this.reverb as any).roomSize.value) * 5;
+      } else if ("decay" in this.reverb) {
+        reverbDecay = Number((this.reverb as any).decay);
+      }
+    }
+
+    const masterVolume = cached?.masterVolume !== undefined
+      ? cached.masterVolume
+      : (this.masterGain ? Number(this.masterGain.gain.value) : 0.85);
+
+    const delayFeedback = cached?.delayFeedback !== undefined
+      ? cached.delayFeedback
+      : (this.delay ? Number(this.delay.feedback.value) : 0.3);
+
+    const delayWet = cached?.delayWet !== undefined
+      ? cached.delayWet
+      : (this.delay ? Number(this.delay.wet.value) : 0);
+
     return {
       reverbWet: this.reverb ? Number(this.reverb.wet.value) : 0,
-      reverbDecay: this.reverb
-        ? "roomSize" in this.reverb
-          ? Number((this.reverb as any).roomSize.value) * 5
-          : "decay" in this.reverb
-          ? Number((this.reverb as any).decay)
-          : 2.5
-        : 2.5,
+      reverbDecay,
       chorusWet: this.chorus ? Number(this.chorus.wet.value) : 0,
       chorusFrequency: this.chorus ? Number(this.chorus.frequency.value) : 1.5,
       chorusDepth: this.chorus ? Number(this.chorus.depth) : 0.6,
-      delayWet: this.delay ? Number(this.delay.wet.value) : 0,
+      delayWet,
       delayTime: this.delay ? String(this.delay.delayTime.value) : "8n.",
-      delayFeedback: this.delay ? Number(this.delay.feedback.value) : 0.3,
+      delayFeedback,
       drive: 0,
-      masterVolume: this.masterGain ? Number(this.masterGain.gain.value) : 0.85
+      masterVolume
     };
+  }
+
+  public hardMute(time: number, holdSeconds: number = 0.1): void {
+    if (!this.isInitialized) return;
+
+    // Restore targets: a re-entrant call reuses the values captured by the in-flight mute, so it
+    // never "restores" the transient muted values; otherwise the live params are the targets.
+    const inFlight = this.isMuteActive() ? this.inFlightMute : null;
+    const targetVol =
+      inFlight?.masterVolume ?? (this.masterGain ? Number(this.masterGain.gain.value) : 0.85);
+    const targetRoomSize =
+      this.reverb && "roomSize" in this.reverb
+        ? inFlight?.roomSize ?? Number((this.reverb as any).roomSize.value ?? 0.75)
+        : undefined;
+    const targetDelayFb = this.delay
+      ? inFlight?.delayFeedback ?? Number(this.delay.feedback.value ?? 0.3)
+      : undefined;
+    const targetDelayWet = this.delay
+      ? inFlight?.delayWet ?? Number(this.delay.wet.value ?? 0)
+      : undefined;
+
+    let delaySeconds = 2;
+    if (this.delay) {
+      try {
+        const raw = this.delay.delayTime?.value;
+        if (typeof raw === "number") {
+          delaySeconds = raw;
+        } else if (typeof raw === "string") {
+          delaySeconds = Tone.Time(raw).toSeconds();
+        }
+        if (!Number.isFinite(delaySeconds) || delaySeconds < 0) {
+          delaySeconds = 2;
+        }
+      } catch {
+        delaySeconds = 2;
+      }
+    }
+
+    const restoreTimeDelay = time + HARD_STOP_RELEASE_S + delaySeconds + 0.05;
+    const restoreTimeMaster = time + holdSeconds + 0.02;
+    const until = Math.max(restoreTimeMaster, time + holdSeconds, restoreTimeDelay);
+
+    this.inFlightMute = {
+      until,
+      masterVolume: targetVol,
+      roomSize: targetRoomSize,
+      delayFeedback: targetDelayFb,
+      delayWet: targetDelayWet
+    };
+
+    // 1. masterGain.gain automation
+    if (this.masterGain) {
+      const gain = this.masterGain.gain as any;
+      if (gain) {
+        const currentVal = Number(gain.value ?? 1);
+        gain.cancelScheduledValues?.(time);
+        gain.setValueAtTime?.(currentVal, time);
+        gain.linearRampToValueAtTime?.(0, time + HARD_STOP_RELEASE_S);
+        gain.setValueAtTime?.(0, time + holdSeconds);
+        gain.linearRampToValueAtTime?.(targetVol, restoreTimeMaster);
+      }
+    }
+
+    // 2. reverb roomSize (guarded for Tone.Reverb without roomSize)
+    if (this.reverb && "roomSize" in this.reverb && targetRoomSize !== undefined) {
+      const rs = (this.reverb as any).roomSize;
+      if (rs) {
+        rs.cancelScheduledValues?.(time);
+        rs.setValueAtTime?.(0, time + HARD_STOP_RELEASE_S);
+        rs.setValueAtTime?.(targetRoomSize, time + holdSeconds);
+      }
+    }
+
+    // 3. delay feedback and wet
+    if (this.delay) {
+      const fb = this.delay.feedback as any;
+      if (fb && targetDelayFb !== undefined) {
+        fb.cancelScheduledValues?.(time);
+        fb.setValueAtTime?.(Number(fb.value ?? 0), time);
+        if (typeof fb.linearRampToValueAtTime === "function") {
+          fb.linearRampToValueAtTime(0, time + HARD_STOP_RELEASE_S);
+        } else {
+          fb.setValueAtTime?.(0, time + HARD_STOP_RELEASE_S);
+        }
+        fb.setValueAtTime?.(targetDelayFb, restoreTimeDelay);
+      }
+
+      const wet = this.delay.wet as any;
+      if (wet && targetDelayWet !== undefined) {
+        wet.cancelScheduledValues?.(time);
+        wet.setValueAtTime?.(Number(wet.value ?? 0), time);
+        if (typeof wet.linearRampToValueAtTime === "function") {
+          wet.linearRampToValueAtTime(0, time + HARD_STOP_RELEASE_S);
+        } else {
+          wet.setValueAtTime?.(0, time + HARD_STOP_RELEASE_S);
+        }
+        wet.setValueAtTime?.(targetDelayWet, restoreTimeDelay);
+      }
+    }
   }
 
   public dispose(): void {
@@ -128,5 +312,6 @@ export class FxRack {
     this.masterGain = null;
     this.limiter = null;
     this.isInitialized = false;
+    this.inFlightMute = null;
   }
 }

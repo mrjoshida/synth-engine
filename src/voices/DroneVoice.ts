@@ -34,6 +34,14 @@ export class DroneVoice extends PooledVoice<Tone.Synth> {
     return Number(getEffectiveParam(patch, "envelope.release"));
   }
 
+  protected overrideRelease(synth: Tone.Synth, seconds: number): () => void {
+    const prev = synth.envelope.release;
+    synth.envelope.release = seconds;
+    return () => {
+      synth.envelope.release = prev;
+    };
+  }
+
   protected applySynth(synth: Tone.Synth, patch: SynthPatch, _smooth?: boolean): void {
     const oscConfig = toToneOscillator({
       type: getEffectiveParam(patch, "oscillator.type") as any,
@@ -55,6 +63,11 @@ export class DroneVoice extends PooledVoice<Tone.Synth> {
     if (note === undefined) {
       this.isToggled = false;
     }
+  }
+
+  public override hardStop(time?: number): void {
+    super.hardStop(time);
+    this.isToggled = false;
   }
 
   public toggle(note: string = "C2"): boolean {

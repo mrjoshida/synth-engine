@@ -23,6 +23,14 @@ export class MembraneVoice extends PooledVoice<Tone.MembraneSynth> {
     return Number(getEffectiveParam(patch, "envelope.release"));
   }
 
+  protected overrideRelease(synth: Tone.MembraneSynth, seconds: number): () => void {
+    const prev = synth.envelope.release;
+    synth.envelope.release = seconds;
+    return () => {
+      synth.envelope.release = prev;
+    };
+  }
+
   protected applySynth(synth: Tone.MembraneSynth, patch: SynthPatch, _smooth?: boolean): void {
     synth.pitchDecay = Number(getEffectiveParam(patch, "membraneParams.pitchDecay"));
     synth.octaves = Number(getEffectiveParam(patch, "membraneParams.octaves"));
