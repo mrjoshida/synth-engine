@@ -3,7 +3,21 @@
  */
 
 import * as Tone from "tone";
-import { SynthPatch } from "../types";
+import { SynthEngineType, SynthPatch } from "../types";
+import { dbToGain, setToneParam } from "./helpers";
+import { INIT_PATCH, withEngineType } from "../params/patch";
+
+export { dbToGain };
+
+export const ENGINE_TRIM_DB: Record<SynthEngineType, number> = {
+  poly: -12,
+  fm: -3,
+  pluck: 0,
+  moog: -21,
+  drone: -14,
+  membrane: -15,
+  sampler: 0,
+};
 
 /**
  * Envelope release duration (in seconds) used during emergency hard stops.
@@ -19,11 +33,33 @@ export interface ApplyPatchOptions {
 export abstract class BaseVoice {
   protected outputNode: Tone.Gain | null = null;
   protected isInitialized = false;
+  protected abstract readonly engine: SynthEngineType;
+  protected lastPatch: SynthPatch | null = null;
 
   /**
    * Tracks active keyed notes: key -> note pitch.
    */
   protected keyToNoteMap: Map<string, string> = new Map();
+
+  protected currentPatch(): SynthPatch {
+    return this.lastPatch ?? withEngineType(INIT_PATCH as SynthPatch, this.engine);
+  }
+
+  /**
+   * Updates outputNode gain based on patch level and engine trim.
+   * Shared helper for all voice subclasses.
+   */
+  protected applyLevel(patch?: SynthPatch, opts?: ApplyPatchOptions): void {
+    if (patch) {
+      this.lastPatch = patch;
+    }
+    if (!this.outputNode) return;
+    const targetPatch = patch ?? this.currentPatch();
+    const level = targetPatch.level ?? 0;
+    const trim = ENGINE_TRIM_DB[this.engine] ?? 0;
+    const gainVal = dbToGain(trim + level);
+    setToneParam(this.outputNode.gain, gainVal, opts?.smooth ?? false);
+  }
 
   public connect(destination: Tone.InputNode): this {
     if (this.outputNode) {

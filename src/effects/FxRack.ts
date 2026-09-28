@@ -11,11 +11,51 @@ interface InFlightMute {
   delayWet?: number;
 }
 
+export const CLIP_RANGE = 4;
+
+/**
+ * Generates an odd-symmetric, monotonic soft-clipping transfer curve.
+ * Below the knee, the transfer curve is the identity (slope = 1).
+ * Above the knee, the curve smoothly saturates towards the ceiling via tanh.
+ *
+ * @param length Array length (table resolution).
+ * @param range Input range [-range, range] mapped to the table across [-1, 1].
+ * @param knee Normalized threshold below which the curve is linear.
+ * @param ceiling Upper bound asymptote (|y| < ceiling).
+ */
+export function softClipCurve(
+  length = 8192,
+  range = 4,
+  knee = 0.9,
+  ceiling = 0.99
+): Float32Array {
+  if (length <= 1) {
+    return new Float32Array(length);
+  }
+  const curve = new Float32Array(length);
+  const denom = length - 1;
+  const delta = ceiling - knee;
+  for (let i = 0; i < length; i++) {
+    const u = -1 + (2 * i) / denom;
+    const x = u * range;
+    const absX = Math.abs(x);
+    if (absX <= knee) {
+      curve[i] = x;
+    } else {
+      const sign = x < 0 ? -1 : 1;
+      curve[i] = sign * (knee + delta * Math.tanh((absX - knee) / delta));
+    }
+  }
+  return curve;
+}
+
 export class FxRack {
   private chorus: Tone.Chorus | null = null;
   private delay: Tone.FeedbackDelay | null = null;
   private reverb: Tone.Freeverb | Tone.Reverb | null = null;
-  private limiter: Tone.Limiter | null = null;
+  private compressor: Tone.Compressor | null = null;
+  private clipGain: Tone.Gain | null = null;
+  private waveShaper: Tone.WaveShaper | null = null;
   private masterGain: Tone.Gain | null = null;
   private isInitialized = false;
   private inFlightMute: InFlightMute | null = null;
@@ -23,12 +63,39 @@ export class FxRack {
   public async init(): Promise<void> {
     if (this.isInitialized) return;
 
+    // Soft-clip safety stage: Tone.Gain(1/CLIP_RANGE) -> Tone.WaveShaper(curve) with oversample '4x' -> destination.
     try {
-      this.limiter = new Tone.Limiter(-1).toDestination();
+      const curve = softClipCurve(8192, CLIP_RANGE);
+      this.waveShaper = new Tone.WaveShaper(curve);
+      this.waveShaper.oversample = "4x";
+      this.waveShaper.toDestination();
+      this.clipGain = new Tone.Gain(1 / CLIP_RANGE).connect(this.waveShaper);
     } catch {
-      this.limiter = null;
+      this.clipGain = null;
+      this.waveShaper = null;
     }
-    const outputTarget: Tone.InputNode = this.limiter || Tone.getDestination();
+
+    const clipperInput: Tone.InputNode = this.clipGain || Tone.getDestination();
+
+    // Tone.Limiter uses the DynamicsCompressorNode default 30 dB knee, which extends
+    // above threshold in Web Audio, plus automatic makeup gain ((1 / fullRangeGain) ^ 0.6).
+    // Replacing it with Tone.Compressor with knee: 0, ratio: 20, threshold: -6 dBFS,
+    // attack: 2 ms, and release: 120 ms holds steady-state output near -2 dBFS (about -2.6 dBFS
+    // at threshold, -1.3 dBFS at +20 dBFS input, after the ~+3.4 dB automatic makeup gain).
+    // The soft clipper below catches transient overshoot before the compressor reacts.
+    try {
+      this.compressor = new Tone.Compressor({
+        threshold: -6,
+        ratio: 20,
+        knee: 0,
+        attack: 0.002,
+        release: 0.12,
+      }).connect(clipperInput);
+    } catch {
+      this.compressor = null;
+    }
+
+    const outputTarget: Tone.InputNode = this.compressor || clipperInput;
     this.masterGain = new Tone.Gain(0.85).connect(outputTarget);
 
     // Freeverb operates purely on native Web Audio nodes without AudioWorklet blob origin restrictions
@@ -305,12 +372,16 @@ export class FxRack {
     this.delay?.dispose();
     this.reverb?.dispose();
     this.masterGain?.dispose();
-    this.limiter?.dispose();
+    this.compressor?.dispose();
+    this.clipGain?.dispose();
+    this.waveShaper?.dispose();
     this.chorus = null;
     this.delay = null;
     this.reverb = null;
     this.masterGain = null;
-    this.limiter = null;
+    this.compressor = null;
+    this.clipGain = null;
+    this.waveShaper = null;
     this.isInitialized = false;
     this.inFlightMute = null;
   }

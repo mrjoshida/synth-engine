@@ -5,6 +5,19 @@ All notable changes to `@mrjoshida/synth-engine` will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-09-28
+
+### Added
+- Per-patch `level` parameter in dB (-24 to +12, default 0, `output` group). It sets each voice's output gain together with a per-engine calibration trim, `ENGINE_TRIM_DB`. Also exported: `dbToGain`, `softClipCurve` and `CLIP_RANGE`.
+- Calibrated `level` values on the 19 synthesized built-in presets. A single full-velocity note now peaks near -10 dBFS before the master dynamics. The sampler presets are not calibrated.
+
+### Changed
+- The master output stage replaces `Tone.Limiter(-1)` with a `Tone.Compressor` (threshold -6 dBFS, ratio 20:1, knee 0, attack 2 ms, release 120 ms), followed by a 4x-oversampled soft clipper whose output stays under 0.99.
+  - `Tone.Limiter` inherits the Web Audio compressor's 30 dB default knee, so it barely limited, and loud presets and chords clipped at the output.
+  - With the new stage, a six-note chord at full velocity no longer clips on any calibrated preset.
+  - Because of the browser compressor's automatic makeup gain, signals below the threshold come out about 3.4 dB louder.
+- Engine loudness is rebalanced through the trims: Moog -21 dB, membrane -15 dB, drone -14 dB, poly -12 dB, FM -3 dB (pluck and sampler unchanged). Custom patches that relied on the old levels can compensate with `level`.
+
 ## [0.4.1] - 2026-09-27
 
 ### Added
