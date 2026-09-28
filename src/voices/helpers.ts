@@ -74,3 +74,11 @@ export function setToneParam(param: any, value: number, smooth: boolean = false)
     param.value = value;
   }
 }
+
+/**
+ * Converts a decibel level to linear gain.
+ * @param db Level in decibels.
+ */
+export function dbToGain(db: number): number {
+  return Math.pow(10, db / 20);
+}

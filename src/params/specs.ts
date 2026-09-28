@@ -39,7 +39,7 @@ export interface ParamSpec {
   /** Scale type for numeric sliders. */
   readonly scale?: "linear" | "log";
   /** Parameter display unit. */
-  readonly unit?: "s" | "Hz" | "cents" | "%" | "x" | "voices" | "oct" | "dB/oct";
+  readonly unit?: "s" | "Hz" | "cents" | "%" | "x" | "voices" | "oct" | "dB/oct" | "dB";
   /** Allowed options for choice parameters. */
   readonly choices?: readonly ParamValue[];
   /** Default value. */
@@ -573,6 +573,19 @@ export const PARAM_SPECS: readonly ParamSpec[] = deepFreeze([
     scale: "linear",
     unit: "%",
     default: 0.85,
+  },
+  {
+    path: "level",
+    label: "Level",
+    group: "output",
+    engines: ALL_ENGINES,
+    kind: "number",
+    min: -24,
+    max: 12,
+    step: 0.5,
+    scale: "linear",
+    unit: "dB",
+    default: 0,
   },
 ]);
 

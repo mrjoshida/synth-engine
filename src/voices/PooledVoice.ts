@@ -22,10 +22,8 @@ export abstract class PooledVoice<
   protected synths: TSynth[] = [];
   protected busGain: Tone.Gain | null = null;
   protected allocator = new VoiceAllocator(MAX_POOLED_VOICES);
-  protected lastPatch: SynthPatch | null = null;
   protected tarCounter = 0;
 
-  protected abstract readonly engine: SynthEngineType;
   protected abstract createSynth(): TSynth;
   protected abstract buildChain(output: Tone.Gain): Tone.InputNode;
   protected abstract applySynth(synth: TSynth, patch: SynthPatch, smooth?: boolean): void;
@@ -33,17 +31,11 @@ export abstract class PooledVoice<
   protected abstract overrideRelease(synth: TSynth, seconds: number): () => void;
   protected applyChain?(_patch: SynthPatch, _smooth?: boolean): void;
 
-  /**
-   * Returns the current effective patch, falling back to INIT_PATCH with this engine type.
-   */
-  protected currentPatch(): SynthPatch {
-    return this.lastPatch ?? withEngineType(INIT_PATCH as SynthPatch, this.engine);
-  }
-
   public async init(): Promise<void> {
     if (this.isInitialized) return;
 
     this.outputNode = new Tone.Gain(1.0);
+    this.applyLevel(this.currentPatch(), { smooth: false });
     const destination = this.buildChain(this.outputNode);
 
     this.busGain = new Tone.Gain(1.0);
@@ -194,7 +186,7 @@ export abstract class PooledVoice<
   }
 
   public applyPatch(patch: SynthPatch, opts?: ApplyPatchOptions): void {
-    this.lastPatch = patch;
+    this.applyLevel(patch, opts);
     const smooth = opts?.smooth ?? false;
     for (const s of this.synths) {
       this.applySynth(s, patch, smooth);

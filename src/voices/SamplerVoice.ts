@@ -1,8 +1,9 @@
 import * as Tone from "tone";
-import { BaseVoice, HARD_STOP_RELEASE_S } from "./Voice";
-import { SynthPatch, SamplerInstrumentConfig } from "../types";
+import { BaseVoice, ApplyPatchOptions, HARD_STOP_RELEASE_S } from "./Voice";
+import { SynthEngineType, SynthPatch, SamplerInstrumentConfig } from "../types";
 
 export class SamplerVoice extends BaseVoice {
+  protected readonly engine: SynthEngineType = "sampler";
   private sampler: Tone.Sampler | null = null;
   private currentInstrumentId: string | null = null;
   private isLoading = false;
@@ -12,6 +13,7 @@ export class SamplerVoice extends BaseVoice {
   public async init(): Promise<void> {
     if (this.isInitialized) return;
     this.outputNode = new Tone.Gain(1.0);
+    this.applyLevel(this.currentPatch(), { smooth: false });
     if (this.sampler) {
       this.sampler.connect(this.outputNode);
     }
@@ -176,7 +178,8 @@ export class SamplerVoice extends BaseVoice {
     }
   }
 
-  public applyPatch(patch: SynthPatch): void {
+  public applyPatch(patch: SynthPatch, opts?: ApplyPatchOptions): void {
+    this.applyLevel(patch, opts);
     if (patch.samplerConfig) {
       console.log(`Applying sampler config: ${patch.samplerConfig.instrumentId}`);
     }

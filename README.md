@@ -12,7 +12,7 @@ Shared multi-engine synthesis, Web MIDI management, and FX library for the FWDBI
   - **Sub Drone (`DroneVoice`)**: Moog Taurus / Buchla inspired continuous cyclical sub & harmonic drones.
   - **Modal Membrane (`MembraneVoice`)**: Mutable Instruments Elements / TR-808 inspired tuned percussion & liquid droplets.
   - **Soundfont / Sampler (`SamplerVoice`)**: Sample-based instrument playback (`Tone.Sampler`) for acoustic Grand Piano, Rhodes Electric Piano, Celesta, and Nylon Guitar.
-- **Modular Stereo FX Rack (`FxRack`)**: Juno Stereo Chorus, Dotted Feedback Delay, Algorithmic Reverb, Master Saturation, and Brickwall Limiter (-1 dBFS).
+- **Modular Stereo FX Rack (`FxRack`)**: Juno Stereo Chorus, Dotted Feedback Delay, Algorithmic Reverb, Master Saturation, and an output compressor (-6 dBFS threshold, 20:1) followed by a soft clipper that never exceeds 0.99 full scale.
 - **22 Curated Factory Presets**: Built-in sound patches covering pads, leads, basses, ambient textures, bells, plucks, percussion, and keys.
 - **Web MIDI Access (`WebMidiManager`)**: Live external hardware & DAW Note On/Off routing with automated port discovery and hot-plug listeners.
 - **Binary MIDI File Encoder (`MidiFileEncoder`)**: Standard MIDI File (SMF Type 0) binary `.mid` generator for DAW export and drag-and-drop.
@@ -227,3 +227,16 @@ if (safePatch) {
 ### Full Polyphony Across Engines
 
 Voices for `pluck`, `moog`, `drone`, and `membrane` now use dynamic voice pooling (`VoiceAllocator`) supporting chords and multi-finger polyphony up to 12 voices each.
+
+## Output Level and Calibration (v0.5.0)
+
+Every patch has an optional `level` in dB (-24 to +12, default 0), grouped under `output` in `PARAM_SPECS`, so UIs generated from the specs get a Level slider automatically. A voice's output gain is `dbToGain(ENGINE_TRIM_DB[engineType] + level)`. The per-engine trims even out the very different raw loudness of the engines. The built-in presets carry calibrated levels, so a single full-velocity note peaks near -10 dBFS before the master dynamics. The sampler presets are not calibrated.
+
+```typescript
+import { setPatchParam } from '@mrjoshida/synth-engine';
+
+engine.setParam('level', -3); // 3 dB quieter, ramped smoothly
+const quieter = setPatchParam(patch, 'level', -6); // pure: returns a new patch
+```
+
+The master chain ends in `Tone.Compressor` (threshold -6 dBFS, ratio 20:1, knee 0, attack 2 ms, release 120 ms), then a 4x-oversampled soft clipper (`softClipCurve`). The compressor holds sustained output near -2 dBFS. The clipper is transparent below 0.9 and rounds off any transient overshoot, so its output stays under 0.99.

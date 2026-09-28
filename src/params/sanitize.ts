@@ -172,6 +172,16 @@ export function sanitizePatch(input: unknown): SynthPatch | null {
       output.description = input.description;
     }
 
+    // level: optional patch level in dB (-24..12)
+    if (Object.prototype.hasOwnProperty.call(input, "level") && input.level !== undefined) {
+      const val = sanitizeField("level", input.level, engineType, false);
+      if (val !== undefined) {
+        output.level = val;
+      } else {
+        output.level = getDefaultParam("level", engineType) as number;
+      }
+    }
+
     // Helper to sanitize a standard section
     function sanitizeSection(sectionName: string, rawSection: unknown): Record<string, any> | undefined {
       if (!isPlainObject(rawSection)) return undefined;

@@ -4,11 +4,12 @@
 
 import * as Tone from "tone";
 import { BaseVoice, ApplyPatchOptions, HARD_STOP_RELEASE_S } from "./Voice";
-import { SynthPatch } from "../types";
+import { SynthEngineType, SynthPatch } from "../types";
 import { toToneOscillator, setToneParam } from "./helpers";
 import { getEffectiveParam } from "../params/patch";
 
 export class FMVoice extends BaseVoice {
+  protected readonly engine: SynthEngineType = "fm";
   private fmPoly: Tone.PolySynth<Tone.FMSynth> | null = null;
   private filter: Tone.Filter | null = null;
   private lastRelease = 1.2;
@@ -17,6 +18,7 @@ export class FMVoice extends BaseVoice {
     if (this.isInitialized) return;
 
     this.outputNode = new Tone.Gain(1.0);
+    this.applyLevel(this.currentPatch(), { smooth: false });
 
     this.filter = new Tone.Filter({
       frequency: 8000,
@@ -95,6 +97,7 @@ export class FMVoice extends BaseVoice {
   }
 
   public applyPatch(patch: SynthPatch, opts?: ApplyPatchOptions): void {
+    this.applyLevel(patch, opts);
     if (!this.fmPoly) return;
     const smooth = opts?.smooth ?? false;
 

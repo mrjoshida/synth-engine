@@ -61,6 +61,7 @@ export interface SynthPatch {
   category: "pad" | "lead" | "pluck" | "bass" | "drone" | "percussion" | "bell" | "keys";
   engineType: SynthEngineType;
   description?: string;
+  level?: number;
   oscillator?: {
     type: OscillatorShape;
     count?: number;
