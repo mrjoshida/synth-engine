@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.0] - 2026-09-28
 
 ### Added
-- Per-patch `level` parameter in dB (-24 to +12, default 0, `output` group). It sets each voice's output gain together with a per-engine calibration trim, `ENGINE_TRIM_DB`. Also exported: `dbToGain`, `softClipCurve` and `CLIP_RANGE`.
+- Per-patch `level` parameter in dB (-24 to +12, default 0, `output` group). It sets each voice's output gain together with a per-engine calibration trim, `ENGINE_TRIM_DB`. Also exported: `dbToGain`, `softClipCurve` and `CLIP_RANGE`. `softClipCurve` throws a `RangeError` unless `range > 0` and `0 <= knee < ceiling`, all finite.
 - Calibrated `level` values on the 19 synthesized built-in presets. A single full-velocity note now peaks near -10 dBFS before the master dynamics. The sampler presets are not calibrated.
 
 ### Changed

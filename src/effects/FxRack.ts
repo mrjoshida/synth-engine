@@ -13,6 +13,15 @@ interface InFlightMute {
 
 export const CLIP_RANGE = 4;
 
+/** Best-effort disposal of a partially constructed node; never throws. */
+function disposeQuietly(node: { dispose(): unknown } | null): void {
+  try {
+    node?.dispose();
+  } catch {
+    // Nothing further to release.
+  }
+}
+
 /**
  * Generates an odd-symmetric, monotonic soft-clipping transfer curve.
  * Below the knee, the transfer curve is the identity (slope = 1).
@@ -22,6 +31,7 @@ export const CLIP_RANGE = 4;
  * @param range Input range [-range, range] mapped to the table across [-1, 1].
  * @param knee Normalized threshold below which the curve is linear.
  * @param ceiling Upper bound asymptote (|y| < ceiling).
+ * @throws RangeError unless range is finite and > 0, and 0 <= knee < ceiling (both finite).
  */
 export function softClipCurve(
   length = 8192,
@@ -29,6 +39,16 @@ export function softClipCurve(
   knee = 0.9,
   ceiling = 0.99
 ): Float32Array {
+  if (
+    !Number.isFinite(range) ||
+    range <= 0 ||
+    !Number.isFinite(knee) ||
+    !Number.isFinite(ceiling) ||
+    knee < 0 ||
+    ceiling <= knee
+  ) {
+    throw new RangeError("softClipCurve: expected finite range > 0 and 0 <= knee < ceiling");
+  }
   if (length <= 1) {
     return new Float32Array(length);
   }
@@ -71,6 +91,9 @@ export class FxRack {
       this.waveShaper.toDestination();
       this.clipGain = new Tone.Gain(1 / CLIP_RANGE).connect(this.waveShaper);
     } catch {
+      // Release a partially built stage so no connected-but-unfed node stays in the graph.
+      disposeQuietly(this.clipGain);
+      disposeQuietly(this.waveShaper);
       this.clipGain = null;
       this.waveShaper = null;
     }
@@ -90,8 +113,10 @@ export class FxRack {
         knee: 0,
         attack: 0.002,
         release: 0.12,
-      }).connect(clipperInput);
+      });
+      this.compressor.connect(clipperInput);
     } catch {
+      disposeQuietly(this.compressor);
       this.compressor = null;
     }
 

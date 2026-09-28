@@ -357,4 +357,94 @@ describe("FxRack Unit Tests", () => {
       (Tone as any).Compressor = origCompressor;
     }
   });
+
+  it("softClipCurve rejects parameters that violate its contract", () => {
+    // ceiling <= knee, negative knee, non-positive or non-finite range, non-finite ceiling
+    // (Infinity would otherwise produce Infinity * tanh(0) = NaN entries).
+    const invalid: Array<[number, number, number]> = [
+      [4, 0.9, 0.9],
+      [4, 0.9, 0.5],
+      [4, -0.1, 0.99],
+      [0, 0.9, 0.99],
+      [-4, 0.9, 0.99],
+      [Number.NaN, 0.9, 0.99],
+      [4, Number.NaN, 0.99],
+      [4, 0.9, Number.POSITIVE_INFINITY],
+    ];
+    for (const [range, knee, ceiling] of invalid) {
+      expect(() => softClipCurve(64, range, knee, ceiling)).toThrow(RangeError);
+    }
+    // The shipped parameters and a zero knee (pure saturation) remain valid.
+    expect(softClipCurve(64, 4, 0.9, 0.99)).toHaveLength(64);
+    const zeroKnee = softClipCurve(65, 4, 0, 0.99);
+    expect(zeroKnee[32]).toBe(0);
+    expect(zeroKnee.every((v) => Number.isFinite(v) && Math.abs(v) < 0.99)).toBe(true);
+  });
+
+  it("disposes a partially built clipper stage if init fails midway", async () => {
+    const Tone = await import("tone");
+    const origGain = Tone.Gain;
+    const origWaveShaper = Tone.WaveShaper;
+    const shapers: any[] = [];
+    (Tone as any).WaveShaper = class RecordingWaveShaper extends (origWaveShaper as any) {
+      constructor(curve?: any) {
+        super(curve);
+        shapers.push(this);
+      }
+    };
+    // Only the clipper's input gain (1 / CLIP_RANGE) fails; the master gain still builds.
+    (Tone as any).Gain = class FailingClipGain extends (origGain as any) {
+      constructor(val?: number) {
+        if (val === 0.25) throw new Error("clip gain creation failed");
+        super(val);
+      }
+    };
+
+    try {
+      const rack = new FxRack();
+      await rack.init();
+
+      expect(shapers).toHaveLength(1);
+      expect(shapers[0].connectedTo).toBe("destination");
+      expect(shapers[0].dispose).toHaveBeenCalledTimes(1);
+      expect((rack as any).waveShaper).toBeNull();
+      expect((rack as any).clipGain).toBeNull();
+      expect((rack as any).masterGain).not.toBeNull();
+
+      rack.dispose();
+    } finally {
+      (Tone as any).Gain = origGain;
+      (Tone as any).WaveShaper = origWaveShaper;
+    }
+  });
+
+  it("disposes the compressor and bypasses it if connecting it fails", async () => {
+    const Tone = await import("tone");
+    const origCompressor = Tone.Compressor;
+    const compressors: any[] = [];
+    (Tone as any).Compressor = class UnconnectableCompressor extends (origCompressor as any) {
+      constructor(opts?: any) {
+        super(opts);
+        compressors.push(this);
+      }
+      connect(): never {
+        throw new Error("compressor connect failed");
+      }
+    };
+
+    try {
+      const rack = new FxRack();
+      await rack.init();
+
+      expect(compressors).toHaveLength(1);
+      expect(compressors[0].dispose).toHaveBeenCalledTimes(1);
+      expect((rack as any).compressor).toBeNull();
+      expect((rack as any).clipGain).not.toBeNull();
+      expect((rack as any).masterGain.connectedTo).toBe((rack as any).clipGain);
+
+      rack.dispose();
+    } finally {
+      (Tone as any).Compressor = origCompressor;
+    }
+  });
 });
