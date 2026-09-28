@@ -156,7 +156,8 @@ import { sanitizePatch } from "../params/sanitize";
 import { SynthPatch } from "../types";
 import { BUILTIN_SYNTH_PRESETS } from "../presets/builtinPresets";
 
-// Snapshot before the hooks below zero the (mutable) trim table for the unit tests.
+// Snapshot of the shipped trims. The unit tests below zero the (mutable) table and
+// restore this snapshot afterwards so no other test observes modified trims.
 const SHIPPED_TRIMS = { ...ENGINE_TRIM_DB };
 
 describe("Task B: Per-patch voice level & engine trim", () => {
@@ -168,7 +169,7 @@ describe("Task B: Per-patch voice level & engine trim", () => {
 
   afterEach(() => {
     for (const k of Object.keys(ENGINE_TRIM_DB) as (keyof typeof ENGINE_TRIM_DB)[]) {
-      ENGINE_TRIM_DB[k] = 0;
+      ENGINE_TRIM_DB[k] = SHIPPED_TRIMS[k];
     }
   });
 
@@ -375,11 +376,13 @@ describe("Shipped loudness calibration", () => {
   });
 
   it("engine trims are finite, within 24 dB, and leave the sampler untouched", () => {
-    for (const [engine, trim] of Object.entries(SHIPPED_TRIMS)) {
+    // Outside the unit-test hooks the live table must hold the shipped values.
+    expect({ ...ENGINE_TRIM_DB }).toEqual(SHIPPED_TRIMS);
+    for (const [engine, trim] of Object.entries(ENGINE_TRIM_DB)) {
       expect(Number.isFinite(trim), engine).toBe(true);
       expect(Math.abs(trim), engine).toBeLessThanOrEqual(24);
     }
-    expect(SHIPPED_TRIMS.sampler).toBe(0);
-    expect(SHIPPED_TRIMS.moog).toBeLessThan(0);
+    expect(ENGINE_TRIM_DB.sampler).toBe(0);
+    expect(ENGINE_TRIM_DB.moog).toBeLessThan(0);
   });
 });
