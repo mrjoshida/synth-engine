@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 // Mock Tone.js for voice level testing
 vi.mock("tone", () => {
@@ -156,22 +156,14 @@ import { sanitizePatch } from "../params/sanitize";
 import { SynthPatch } from "../types";
 import { BUILTIN_SYNTH_PRESETS } from "../presets/builtinPresets";
 
-// Snapshot of the shipped trims. The unit tests below zero the (mutable) table and
-// restore this snapshot afterwards so no other test observes modified trims.
-const SHIPPED_TRIMS = { ...ENGINE_TRIM_DB };
+type TrimEngine = keyof typeof ENGINE_TRIM_DB;
+
+/** Output gain a voice must have at `level`, per the shipped (frozen) trim table. */
+function expectedGain(engine: TrimEngine, level: number): number {
+  return dbToGain(ENGINE_TRIM_DB[engine] + level);
+}
 
 describe("Task B: Per-patch voice level & engine trim", () => {
-  beforeEach(() => {
-    for (const k of Object.keys(ENGINE_TRIM_DB) as (keyof typeof ENGINE_TRIM_DB)[]) {
-      ENGINE_TRIM_DB[k] = 0;
-    }
-  });
-
-  afterEach(() => {
-    for (const k of Object.keys(ENGINE_TRIM_DB) as (keyof typeof ENGINE_TRIM_DB)[]) {
-      ENGINE_TRIM_DB[k] = SHIPPED_TRIMS[k];
-    }
-  });
 
   it("PARAM_SPECS contains level in output group with correct bounds", () => {
     const spec = getParamSpec("level");
@@ -194,7 +186,7 @@ describe("Task B: Per-patch voice level & engine trim", () => {
     expect(dbToGain(-20)).toBeCloseTo(0.1, 4);
   });
 
-  it("applyPatch with level -6 sets outputNode gain to about 0.501 for poly voice", async () => {
+  it("applyPatch with level -6 sets the poly output gain to trim - 6 dB", async () => {
     const poly = new PolyVoice();
     await poly.init();
 
@@ -205,69 +197,63 @@ describe("Task B: Per-patch voice level & engine trim", () => {
     };
     poly.applyPatch(patch);
 
-    const gain = poly.getOutput()!.gain.value;
-    expect(gain).toBeCloseTo(0.501, 3);
+    expect(poly.getOutput()!.gain.value).toBeCloseTo(expectedGain("poly", -6), 5);
     poly.dispose();
   });
 
-  it("applyPatch with level -6 sets outputNode gain to about 0.501 for pooled voice (moog and pluck)", async () => {
+  it("applyPatch with level -6 sets pooled voice gains (moog and pluck) to trim - 6 dB", async () => {
     const moog = new MoogVoice();
     await moog.init();
-
-    const moogPatch: SynthPatch = {
-      ...INIT_PATCH,
-      engineType: "moog",
-      level: -6,
-    };
-    moog.applyPatch(moogPatch);
-
-    expect(moog.getOutput()!.gain.value).toBeCloseTo(0.501, 3);
+    moog.applyPatch({ ...INIT_PATCH, engineType: "moog", level: -6 });
+    expect(moog.getOutput()!.gain.value).toBeCloseTo(expectedGain("moog", -6), 5);
     moog.dispose();
 
     const pluck = new PluckVoice();
     await pluck.init();
-
-    const pluckPatch: SynthPatch = {
-      ...INIT_PATCH,
-      engineType: "pluck",
-      level: -6,
-    };
-    pluck.applyPatch(pluckPatch);
-
-    expect(pluck.getOutput()!.gain.value).toBeCloseTo(0.501, 3);
+    pluck.applyPatch({ ...INIT_PATCH, engineType: "pluck", level: -6 });
+    expect(pluck.getOutput()!.gain.value).toBeCloseTo(expectedGain("pluck", -6), 5);
     pluck.dispose();
   });
 
-  it("default level of 0 gives gain 1", async () => {
+  it("a missing or zero level leaves just the engine trim", async () => {
     const poly = new PolyVoice();
     await poly.init();
 
     // Default patch without level (effective level 0)
     poly.applyPatch({ ...INIT_PATCH, engineType: "poly" });
-    expect(poly.getOutput()!.gain.value).toBeCloseTo(1.0, 4);
+    expect(poly.getOutput()!.gain.value).toBeCloseTo(dbToGain(ENGINE_TRIM_DB.poly), 5);
 
     // Explicit level: 0
     poly.applyPatch({ ...INIT_PATCH, engineType: "poly", level: 0 });
-    expect(poly.getOutput()!.gain.value).toBeCloseTo(1.0, 4);
+    expect(poly.getOutput()!.gain.value).toBeCloseTo(dbToGain(ENGINE_TRIM_DB.poly), 5);
 
     poly.dispose();
   });
 
-  it("the trim is added: ENGINE_TRIM_DB + level", async () => {
+  it("the trim and the level add in dB", async () => {
+    // Only meaningful while the poly trim is non-zero.
+    expect(ENGINE_TRIM_DB.poly).not.toBe(0);
     const poly = new PolyVoice();
     await poly.init();
 
-    ENGINE_TRIM_DB.poly = 3;
-    // With trim = 3 and level = -6, total = -3 dB -> gain ~ 0.7079
-    poly.applyPatch({ ...INIT_PATCH, engineType: "poly", level: -6 });
-    expect(poly.getOutput()!.gain.value).toBeCloseTo(0.7079, 3);
-
-    // With trim = -2 and level = 0, total = -2 dB -> gain ~ 0.7943
-    ENGINE_TRIM_DB.poly = -2;
     poly.applyPatch({ ...INIT_PATCH, engineType: "poly", level: 0 });
-    expect(poly.getOutput()!.gain.value).toBeCloseTo(0.7943, 3);
+    const atZero = poly.getOutput()!.gain.value;
+    poly.applyPatch({ ...INIT_PATCH, engineType: "poly", level: -6 });
+    const atMinus6 = poly.getOutput()!.gain.value;
+    poly.applyPatch({ ...INIT_PATCH, engineType: "poly", level: 3 });
+    const atPlus3 = poly.getOutput()!.gain.value;
+
+    // The level scales the trimmed gain, whatever the trim is...
+    expect(atMinus6 / atZero).toBeCloseTo(0.501187, 5);
+    expect(atPlus3 / atZero).toBeCloseTo(1.412538, 5);
+    // ...and the trimmed gain is the trim itself, in dB.
+    expect(20 * Math.log10(atZero)).toBeCloseTo(ENGINE_TRIM_DB.poly, 5);
 
     poly.dispose();
+  });
+
+  it("the trim table is frozen", () => {
+    expect(Object.isFrozen(ENGINE_TRIM_DB)).toBe(true);
   });
 
   it("smooth uses the ramp path (rampTo)", async () => {
@@ -278,7 +264,7 @@ describe("Task B: Per-patch voice level & engine trim", () => {
     rampSpy.mockClear();
 
     poly.applyPatch({ ...INIT_PATCH, engineType: "poly", level: -6 }, { smooth: true });
-    expect(rampSpy).toHaveBeenCalledWith(expect.closeTo(0.501, 3), 0.05);
+    expect(rampSpy).toHaveBeenCalledWith(expect.closeTo(expectedGain("poly", -6), 5), 0.05);
 
     poly.dispose();
   });
@@ -287,25 +273,25 @@ describe("Task B: Per-patch voice level & engine trim", () => {
     const poly = new PolyVoice();
     poly.applyPatch({ ...INIT_PATCH, engineType: "poly", level: -6 });
     await poly.init();
-    expect(poly.getOutput()!.gain.value).toBeCloseTo(0.501, 3);
+    expect(poly.getOutput()!.gain.value).toBeCloseTo(expectedGain("poly", -6), 5);
     poly.dispose();
 
     const moog = new MoogVoice();
     moog.applyPatch({ ...INIT_PATCH, engineType: "moog", level: -6 });
     await moog.init();
-    expect(moog.getOutput()!.gain.value).toBeCloseTo(0.501, 3);
+    expect(moog.getOutput()!.gain.value).toBeCloseTo(expectedGain("moog", -6), 5);
     moog.dispose();
   });
 
-  it("applies default level at init without prior applyPatch", async () => {
+  it("applies the engine trim at init without prior applyPatch", async () => {
     const poly = new PolyVoice();
     await poly.init();
-    expect(poly.getOutput()!.gain.value).toBeCloseTo(1.0, 4);
+    expect(poly.getOutput()!.gain.value).toBeCloseTo(expectedGain("poly", 0), 5);
     poly.dispose();
 
     const moog = new MoogVoice();
     await moog.init();
-    expect(moog.getOutput()!.gain.value).toBeCloseTo(1.0, 4);
+    expect(moog.getOutput()!.gain.value).toBeCloseTo(expectedGain("moog", 0), 5);
     moog.dispose();
   });
 
@@ -322,8 +308,9 @@ describe("Task B: Per-patch voice level & engine trim", () => {
 
     for (const v of voices) {
       await v.init();
-      v.applyPatch({ ...INIT_PATCH, engineType: (v as any).engine, level: -6 });
-      expect(v.getOutput()!.gain.value).toBeCloseTo(0.501, 3);
+      const engine = (v as any).engine as TrimEngine;
+      v.applyPatch({ ...INIT_PATCH, engineType: engine, level: -6 });
+      expect(v.getOutput()!.gain.value, engine).toBeCloseTo(expectedGain(engine, -6), 5);
       v.dispose();
     }
   });
@@ -376,8 +363,6 @@ describe("Shipped loudness calibration", () => {
   });
 
   it("engine trims are finite, within 24 dB, and leave the sampler untouched", () => {
-    // Outside the unit-test hooks the live table must hold the shipped values.
-    expect({ ...ENGINE_TRIM_DB }).toEqual(SHIPPED_TRIMS);
     for (const [engine, trim] of Object.entries(ENGINE_TRIM_DB)) {
       expect(Number.isFinite(trim), engine).toBe(true);
       expect(Math.abs(trim), engine).toBeLessThanOrEqual(24);

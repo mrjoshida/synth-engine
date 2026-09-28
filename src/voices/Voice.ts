@@ -9,7 +9,13 @@ import { INIT_PATCH, withEngineType } from "../params/patch";
 
 export { dbToGain };
 
-export const ENGINE_TRIM_DB: Record<SynthEngineType, number> = {
+/**
+ * Per-engine output trim in dB, calibrated so that engines with very different raw
+ * loudness land at similar levels. A voice's output gain is
+ * `dbToGain(ENGINE_TRIM_DB[engine] + (patch.level ?? 0))`. Frozen: adjust loudness per
+ * patch with `level` instead.
+ */
+export const ENGINE_TRIM_DB: Readonly<Record<SynthEngineType, number>> = Object.freeze({
   poly: -12,
   fm: -3,
   pluck: 0,
@@ -17,7 +23,7 @@ export const ENGINE_TRIM_DB: Record<SynthEngineType, number> = {
   drone: -14,
   membrane: -15,
   sampler: 0,
-};
+});
 
 /**
  * Envelope release duration (in seconds) used during emergency hard stops.

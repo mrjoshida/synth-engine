@@ -31,7 +31,8 @@ function disposeQuietly(node: { dispose(): unknown } | null): void {
  * @param range Input range [-range, range] mapped to the table across [-1, 1].
  * @param knee Normalized threshold below which the curve is linear.
  * @param ceiling Upper bound asymptote (|y| < ceiling).
- * @throws RangeError unless range is finite and > 0, and 0 <= knee < ceiling (both finite).
+ * @throws RangeError unless length is a non-negative integer, range is finite and > 0,
+ *   and 0 <= knee < ceiling (both finite).
  */
 export function softClipCurve(
   length = 8192,
@@ -40,6 +41,8 @@ export function softClipCurve(
   ceiling = 0.99
 ): Float32Array {
   if (
+    !Number.isInteger(length) ||
+    length < 0 ||
     !Number.isFinite(range) ||
     range <= 0 ||
     !Number.isFinite(knee) ||
@@ -47,7 +50,9 @@ export function softClipCurve(
     knee < 0 ||
     ceiling <= knee
   ) {
-    throw new RangeError("softClipCurve: expected finite range > 0 and 0 <= knee < ceiling");
+    throw new RangeError(
+      "softClipCurve: expected integer length >= 0, finite range > 0 and 0 <= knee < ceiling"
+    );
   }
   if (length <= 1) {
     return new Float32Array(length);

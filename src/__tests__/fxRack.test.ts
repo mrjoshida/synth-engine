@@ -374,6 +374,10 @@ describe("FxRack Unit Tests", () => {
     for (const [range, knee, ceiling] of invalid) {
       expect(() => softClipCurve(64, range, knee, ceiling)).toThrow(RangeError);
     }
+    // Fractional or negative table lengths are rejected too.
+    expect(() => softClipCurve(64.5)).toThrow(RangeError);
+    expect(() => softClipCurve(-1)).toThrow(RangeError);
+    expect(() => softClipCurve(Number.NaN)).toThrow(RangeError);
     // The shipped parameters and a zero knee (pure saturation) remain valid.
     expect(softClipCurve(64, 4, 0.9, 0.99)).toHaveLength(64);
     const zeroKnee = softClipCurve(65, 4, 0, 0.99);
