@@ -5,6 +5,11 @@ All notable changes to `@mrjoshida/synth-engine` will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-09-28
+
+### Fixed
+- Pluck notes played shortly after `init()` could be silent. Tone's pluck comb filter is an AudioWorklet node that Tone creates only once the worklet module has loaded, and pluck synths beyond the first were created at note time. `PluckVoice` now creates its whole pool during `init()` and waits for the worklet module before resolving (at most 5 s; on timeout or failure it logs a warning and resolves anyway). As a result `SynthEngine.init()` resolves only once pluck notes can sound.
+
 ## [0.5.0] - 2026-09-28
 
 ### Added
