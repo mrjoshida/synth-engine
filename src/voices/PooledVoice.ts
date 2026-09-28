@@ -31,6 +31,10 @@ export abstract class PooledVoice<
   protected abstract overrideRelease(synth: TSynth, seconds: number): () => void;
   protected applyChain?(_patch: SynthPatch, _smooth?: boolean): void;
 
+  protected prewarmCount(): number {
+    return 1;
+  }
+
   public async init(): Promise<void> {
     if (this.isInitialized) return;
 
@@ -45,8 +49,10 @@ export abstract class PooledVoice<
       s.connect(this.busGain);
     }
 
-    // Pre-warm ONE synth
-    this.getOrCreateSynth(0);
+    const prewarm = Math.min(this.prewarmCount(), MAX_POOLED_VOICES);
+    for (let i = 0; i < prewarm; i++) {
+      this.getOrCreateSynth(i);
+    }
 
     this.applyChain?.(this.currentPatch(), false);
 

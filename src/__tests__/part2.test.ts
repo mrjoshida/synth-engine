@@ -137,7 +137,18 @@ import { setToneParam, toToneOscillator } from "../voices/helpers";
 import { SynthPatch } from "../types";
 import { VoiceAllocator } from "../voices/VoiceAllocator";
 import { PluckVoice } from "../voices/PluckVoice";
+import { MAX_POOLED_VOICES } from "../voices/PooledVoice";
 import * as Tone from "tone";
+
+interface PlayableMock {
+  triggerAttack: { mock: { calls: unknown[][] } };
+  triggerAttackRelease: { mock: { calls: unknown[][] } };
+}
+
+/** The pool's synths (Tone mocks) of a pooled voice. */
+function pooledSynths(voice: object): PlayableMock[] {
+  return (voice as unknown as { synths: PlayableMock[] }).synths;
+}
 
 describe("Part 2: Polyphony, Voice Pooling & Engine Enhancements", () => {
   let engine: SynthEngine;
@@ -155,9 +166,20 @@ describe("Part 2: Polyphony, Voice Pooling & Engine Enhancements", () => {
     const pooledVoices = [engine.pluckVoice, engine.moogVoice, engine.droneVoice, engine.membraneVoice];
 
     for (const v of pooledVoices) {
-      expect((v as any).synths.length).toBe(1); // pre-warm
+      // Pluck creates its whole pool at init (its synths depend on an async AudioWorklet); the
+      // other pooled voices pre-warm one synth and grow on demand.
+      const prewarmed = v === engine.pluckVoice ? MAX_POOLED_VOICES : 1;
+      expect(pooledSynths(v).length).toBe(prewarmed);
       v.triggerAttack(["C3", "E3", "G3"]);
-      expect((v as any).synths.length).toBe(3);
+      expect(pooledSynths(v).length).toBe(Math.max(prewarmed, 3));
+      // Each chord note went to its own synth.
+      const played = pooledSynths(v).filter(
+        (s) => s.triggerAttack.mock.calls.length + s.triggerAttackRelease.mock.calls.length > 0
+      );
+      expect(played.length).toBe(3);
+      const notes = played.map((s) => [...s.triggerAttack.mock.calls, ...s.triggerAttackRelease.mock.calls]);
+      expect(notes.map((calls) => calls.length)).toEqual([1, 1, 1]);
+      expect(notes.map((calls) => calls[0][0]).sort()).toEqual(["C3", "E3", "G3"]);
       v.triggerRelease();
     }
   });
